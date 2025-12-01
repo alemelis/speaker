@@ -1,0 +1,42 @@
+services:
+    rfid-daemon:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: rfid-daemon
+        # Use host networking so the container can resolve/reach owntone.local:3689
+        network_mode: host
+        restart: unless-stopped
+
+        # Env for your script
+        environment:
+            # Point at the bind-mounted file path *inside* the container
+            TAGS_FILE: /host/speaker/tags.yaml
+            # Your Owntone API base URL
+            OWNTONE_API: http://owntone.local:3689/api
+
+        # Mount your tags and (optionally) the whole speaker dir read-only
+        volumes:
+            - /home/pi4/speaker:/host/speaker:ro
+
+        # Give read access to input events
+        devices:
+            - /dev/input:/dev/input:ro
+
+        # If you hit permissions issues reading /dev/input, uncomment one of these:
+        # privileged: true           # blunt but effective
+        # group_add:
+        #   - "input"                # assumes the 'input' group exists on the host
+
+        # Keep the FS mostly read-only for safety; allow tmp for Python/evdev
+        read_only: true
+        tmpfs:
+            - /tmp
+            - /var/tmp
+
+        # Log rotation so container logs don’t fill disks
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "5"
