@@ -47,7 +47,9 @@ if st.button("Run Command"):
     process.wait()  # wait for process to finish
 
     if process.returncode == 0:
+        placeholder.text("")
         st.success("✅")
+        os.system(f"ls {savedir}/*.m4a > {savedir}/{author}.m3u")
     else:
         st.error(f"Failed with code: {process.returncode}")
         st.stop()
@@ -70,8 +72,10 @@ if st.button("Run Command"):
         process2.wait()
 
         if process2.returncode == 0:
+            placeholder.text("")
             st.success("✅ Command completed successfully!")
             os.system(f"mv /tmp/temp_audio.m4a {dst}")
+            os.system(f"ls {savedir}/*.m4a > {savedir}/{author}.m3u")
         else:
             st.error(f"❌ Command failed with code {process.returncode}")
             st.stop()
