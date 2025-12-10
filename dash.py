@@ -5,39 +5,66 @@ import os
 
 SAVEDIR = Path('/mnt/owntone/music/')
 
+playlist = st.checkbox(label="playlist", value=False)
 url = st.text_input(label="URL")
-title = st.text_input(label="Title")
-author = st.text_input(label="Author")
+if not playlist:
+    title = st.text_input(label="Title")
+artist = st.text_input(label="Artist")
 album = st.text_input(label="Album")
 delay = st.number_input(label="Delay (s)", value=0)
 
-playlist = st.checkbox(label="playlist", value=False)
+
 
 if st.button("Run Command"):
     if not url:
         st.error("need the URL!")
         st.stop()
 
-    st.info("Downloading...")
-    placeholder = st.empty()  # this area will be updated live
-    output = ""
-
     # Run the command and capture output as it happens
-    savedir = SAVEDIR / author
-    dirname = author
+    savedir = SAVEDIR / artist
+    dirname = artist
     playlist_flag = "--no-playlist"
     if playlist:
-        dirname = f"{author}-{album}"
+        dirname = f"{artist}-{album}"
         savedir = SAVEDIR / dirname
         playlist_flag = "--yes-playlist"
     savedir.mkdir(parents=True, exist_ok=True)
-    if title == "":
-        if playlist:
-            title = '"%(playlist_index)02d-%(title)s"'
-        else:
-            title = '"%(title)s"'
-    cmd = ["yt-dlp", playlist_flag, "-x", "--audio-format", "m4a", "-P", str(savedir), "-o", title, url]
-    st.text(" ".join(cmd))
+    if playlist:
+        title = "%(playlist_index)02d-%(title)s"
+    else:
+        title = title if title else "%(title)s"
+    metadata = [
+        "--embed-metadata",
+        "--embed-thumbnail",
+    ]
+    # 1. Use FFmpeg arguments to FORCE static values.
+    # We use --postprocessor-args to tell FFmpeg exactly what to write.
+    ffmpeg_args = []
+
+    if artist:
+        # Sanitize quotes just in case
+        safe_artist = artist.replace('"', '\\"')
+        ffmpeg_args.append(f'-metadata artist="{safe_artist}"')
+        ffmpeg_args.append(f'-metadata album_artist="{safe_artist}"')
+
+    if album:
+        safe_album = album.replace('"', '\\"')
+        ffmpeg_args.append(f'-metadata album="{safe_album}"')
+
+    # Add the FFmpeg args if they exist
+    if ffmpeg_args:
+        # "Metadata:" tells yt-dlp to run this during the metadata step
+        metadata.extend(["--postprocessor-args", f"Metadata:{' '.join(ffmpeg_args)}"])
+
+    # 2. Handle Track Numbers (This is dynamic, so we still use parse-metadata)
+    # playlist_index is calculated by yt-dlp, so we map it to track_number
+    if playlist:
+        metadata.extend(["--parse-metadata", "playlist_index:%(track_number)s"])
+    else:
+        # Optional: Force track 1 for single downloads if you want
+        metadata.extend(["--parse-metadata", "1:%(track_number)s"])
+    cmd = ["yt-dlp", playlist_flag, "-x", "--audio-format", "m4a", "-P", str(savedir), "-o", title, *metadata, url]
+    st.info(" ".join(cmd))
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -46,6 +73,8 @@ if st.button("Run Command"):
         bufsize=1,
     )
 
+    placeholder = st.empty()  # this area will be updated live
+    output = ""
     dst = ""
     for line in process.stdout:
         output += line
