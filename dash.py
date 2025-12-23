@@ -13,6 +13,8 @@ artist = st.text_input(label="Artist")
 album = st.text_input(label="Album")
 if not playlist:
     delay = st.number_input(label="Delay (s)", value=0)
+else:
+    delay = 0
 
 
 if st.button("Run Command"):
