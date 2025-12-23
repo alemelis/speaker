@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 import os
 
-SAVEDIR = Path('/mnt/owntone/music/')
+SAVEDIR = Path('/mnt/nvme/music/')
 
 playlist = st.checkbox(label="playlist", value=False)
 url = st.text_input(label="URL")
@@ -11,7 +11,8 @@ if not playlist:
     title = st.text_input(label="Title")
 artist = st.text_input(label="Artist")
 album = st.text_input(label="Album")
-delay = st.number_input(label="Delay (s)", value=0)
+if not playlist:
+    delay = st.number_input(label="Delay (s)", value=0)
 
 
 if st.button("Run Command"):

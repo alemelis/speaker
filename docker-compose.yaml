@@ -21,12 +21,12 @@ services:
 
         # Give read access to input events
         devices:
-            - /dev/input:/dev/input:ro
+            - /dev/input/event4:/dev/input/event4:ro
 
         # If you hit permissions issues reading /dev/input, uncomment one of these:
-        # privileged: true           # blunt but effective
+        privileged: true # blunt but effective
         # group_add:
-        #   - "input"                # assumes the 'input' group exists on the host
+        #     - "input" # assumes the 'input' group exists on the host
 
         # Keep the FS mostly read-only for safety; allow tmp for Python/evdev
         read_only: true
