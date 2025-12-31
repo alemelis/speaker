@@ -6,6 +6,7 @@ import time
 import requests
 from evdev import list_devices, InputDevice, ecodes
 import os
+import time
 
 # ---------------- CONFIG ----------------
 TAGS_FILE = os.getenv("TAGS_FILE", "./tags.yaml")
@@ -38,6 +39,7 @@ class Player():
             sys.exit(1)
 
         self.tag = None
+        self.time = time.time()
 
     @classmethod
     def stop_playback(cls):
@@ -47,6 +49,20 @@ class Player():
             requests.put(f"{OWNTONE_API}/queue/clear")
         except Exception as e:
             logging.error(f"Failed to stop playback: {e}")
+
+    def search(self, query):
+        logging.info(f"Looking for {query}")
+        try:
+            resp = requests.get(f"{OWNTONE_API}/search?type={query}&limit=1")
+            resp.raise_for_status()  # good habit
+
+            thing_id = resp.json()
+            logging.info(thing_id)
+            if "tracks" in query:
+                return thing_id['tracks']["items"][0]['uri']
+            return thing_id['albums']["items"][0]['uri']
+        except Exception as e:
+            logging.error(f"Failed to search {query}: {e}")
 
     def start_playback(self, url):
         self.stop_playback()
@@ -66,11 +82,14 @@ class Player():
             logging.error(f"Failed to toggle shuffle: {e}")
 
     def read_tag(self, tag_id):
-        if tag_id != self.tag:
-            url = self.tags.get(int(tag_id))
+        now = time.time()
+        if tag_id != self.tag or (now - self.time > 30.0):
+            self.time = time.time()
+            query = self.tags.get(int(tag_id))
+            url = self.search(query)
             if url:
-                # self.toggle_shuffle("playlist" in url)
                 self.start_playback(url)
+                self.tag = tag_id
             else:
                 logging.warning(f"Unknown tag: {tag_id}")
 
