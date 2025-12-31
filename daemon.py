@@ -6,7 +6,6 @@ import time
 import requests
 from evdev import list_devices, InputDevice, ecodes
 import os
-import time
 
 # ---------------- CONFIG ----------------
 TAGS_FILE = os.getenv("TAGS_FILE", "./tags.yaml")
