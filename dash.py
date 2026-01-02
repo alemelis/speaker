@@ -49,6 +49,8 @@ if st.button("Run Command"):
         safe_album = album.replace('"', '\\"')
         ffmpeg_args.append(f'-metadata album="{safe_album}"')
 
+    ffmpeg_args.append(f'-metadata title="{title}"')
+
     if ffmpeg_args:
         metadata.extend(["--postprocessor-args", f"Metadata:{' '.join(ffmpeg_args)}"])
 
