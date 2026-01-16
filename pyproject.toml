@@ -1,0 +1,12 @@
+[project]
+name = "speaker"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "evdev>=1.9.2",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+    "streamlit>=1.51.0",
+]
