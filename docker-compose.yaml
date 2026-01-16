@@ -1,0 +1,25 @@
+services:
+    rfid-daemon:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: rfid-daemon
+        network_mode: host
+        restart: unless-stopped
+        environment:
+            TAGS_FILE: /host/speaker/${TAGS_FILE}
+            OWNTONE_API: ${OWNTONE_API}
+        volumes:
+            - ${SPEAKER_DIR}:/host/speaker:ro
+        devices:
+            - /dev/input/event4:/dev/input/event4:ro
+        privileged: true
+        read_only: true
+        tmpfs:
+            - /tmp
+            - /var/tmp
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "5"
