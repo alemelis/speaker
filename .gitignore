@@ -12,3 +12,4 @@ wheels/
 # app
 tags.yaml
 .env
+wifi_credentials.h
