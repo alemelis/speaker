@@ -2,8 +2,12 @@ import streamlit as st
 import subprocess
 from pathlib import Path
 import os
+from dotenv import load_dotenv
 
-SAVEDIR = Path('/mnt/nvme/music/')
+load_dotenv()
+
+SAVEDIR = Path(os.getenv("ST_SAVE_DIR"))
+DENO_PATH = os.getenv("DENO_PATH")
 
 playlist = st.checkbox(label="playlist", value=False)
 url = st.text_input(label="URL")
@@ -60,7 +64,8 @@ if st.button("Run Command"):
     else:
         metadata.extend(["--parse-metadata", "1:%(track_number)s"])
 
-    cmd = ["yt-dlp", playlist_flag, "-x", "--audio-format", "m4a", "-P", str(savedir), "-o", title, *metadata, url]
+    cmd = ["yt-dlp", "--js-runtimes", f"deno:{DENO_PATH}",
+        playlist_flag, "-x", "--audio-format", "m4a", "-P", str(savedir), "-o", title, *metadata, url]
     st.info(" ".join(cmd))
     process = subprocess.Popen(
         cmd,
@@ -113,7 +118,6 @@ if st.button("Run Command"):
             placeholder.text("")
             st.success("✅ Command completed successfully!")
             os.system(f"mv /tmp/temp_audio.m4a {dst}")
-            os.system(f"ls {savedir}/*.m4a > {savedir}/{dirname}.m3u")
         else:
             st.error(f"❌ Command failed with code {process.returncode}")
             st.stop()
