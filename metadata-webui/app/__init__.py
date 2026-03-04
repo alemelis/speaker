@@ -1,0 +1,1 @@
+"""Owntone metadata webui package."""

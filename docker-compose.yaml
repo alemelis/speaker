@@ -23,3 +23,22 @@ services:
             options:
                 max-size: "10m"
                 max-file: "5"
+
+    metadata-webui:
+        build:
+            context: metadata-webui
+            dockerfile: Dockerfile
+        container_name: metadata-webui
+        ports:
+            - "3030:3030"
+        restart: unless-stopped
+        environment:
+            MUSIC_ROOT: /music
+            OWNTONE_BASE: ${OWNTONE_API}
+        volumes:
+            - ${ST_SAVE_DIR}:/music
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "3"

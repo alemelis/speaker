@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Owntone Metadata WebUI</title>
+  <link rel="stylesheet" href="/style.css?v=20260304a">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Owntone Metadata WebUI</h1>
+    <div class="topbar-actions">
+      <button id="rescan-btn" type="button">Rescan Owntone</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="content">
+      <div class="controls">
+        <input id="search-input" type="search" placeholder="Search title, artist, album...">
+        <button id="select-visible-btn" type="button">Select all in view</button>
+      </div>
+
+      <div id="batch-bar" class="batch-bar hidden">
+        <span id="batch-count">0 selected</span>
+        <form id="batch-form">
+          <input name="album" placeholder="Album">
+          <input name="albumartist" placeholder="Album Artist">
+          <input name="artist" placeholder="Artist">
+          <input name="title" placeholder="Title">
+          <input name="tracknumber" placeholder="Track #">
+          <input name="discnumber" placeholder="Disc #">
+          <input name="compilation" placeholder="Compilation (1/0)">
+          <input name="date" placeholder="Date">
+          <button id="apply-selected-btn" type="submit">Apply to Selected</button>
+        </form>
+        <div id="batch-loading" class="batch-loading hidden" aria-live="polite">
+          <span>Applying updates...</span>
+          <div class="progress-track">
+            <div class="progress-bar"></div>
+          </div>
+        </div>
+      </div>
+
+      <table id="tracks-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Title</th>
+            <th>Artist</th>
+            <th>Album</th>
+            <th>Album Artist</th>
+            <th>Track</th>
+            <th>Disc</th>
+          </tr>
+        </thead>
+        <tbody id="tracks-body"></tbody>
+      </table>
+    </section>
+
+    <aside id="editor-panel" class="editor hidden">
+      <h2>Edit Track</h2>
+      <p id="editor-path" class="path"></p>
+      <form id="track-form">
+        <input name="title" placeholder="Title">
+        <input name="artist" placeholder="Artist">
+        <input name="album" placeholder="Album">
+        <input name="albumartist" placeholder="Album Artist">
+        <input name="tracknumber" placeholder="Track #">
+        <input name="discnumber" placeholder="Disc #">
+        <input name="compilation" placeholder="Compilation (1/0)">
+        <input name="date" placeholder="Date">
+        <div class="editor-actions">
+          <button type="submit">Save</button>
+          <button id="close-editor-btn" type="button">Close</button>
+        </div>
+      </form>
+    </aside>
+  </main>
+
+  <div id="message" class="message"></div>
+
+  <script src="/app.js?v=20260304a"></script>
+</body>
+</html>
