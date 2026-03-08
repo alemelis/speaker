@@ -11,5 +11,6 @@ wheels/
 
 # app
 tags.yaml
+fomo.db*
 .env
 wifi_credentials.h

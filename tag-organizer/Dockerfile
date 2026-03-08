@@ -9,6 +9,7 @@ RUN pip install -r /app/requirements.txt
 
 COPY tag-organizer/app /app/app
 COPY shared/fomo.css /app/app/static/fomo.css
+COPY shared/db.py /app/db.py
 
 EXPOSE 3040
 

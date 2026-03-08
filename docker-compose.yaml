@@ -7,14 +7,13 @@ services:
         network_mode: host
         restart: unless-stopped
         environment:
-            TAGS_FILE: /host/speaker/${TAGS_FILE}
+            FOMO_DB: /data/fomo.db
             OWNTONE_API: ${OWNTONE_API}
         volumes:
-            - ${SPEAKER_DIR}:/host/speaker:ro
+            - ${SPEAKER_DIR}:/data
         devices:
             - /dev/input/event4:/dev/input/event4:ro
         privileged: true
-        read_only: true
         tmpfs:
             - /tmp
             - /var/tmp
@@ -51,7 +50,7 @@ services:
         network_mode: host
         restart: unless-stopped
         environment:
-            TAGS_FILE: /data/tags.yaml
+            FOMO_DB: /data/fomo.db
             OWNTONE_API: ${OWNTONE_API}
         volumes:
             - ${SPEAKER_DIR}:/data
