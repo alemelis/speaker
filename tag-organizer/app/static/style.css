@@ -1,16 +1,7 @@
-body {
-  margin: 0;
-  padding: 0;
-  font-family: Arial, sans-serif;
-  color: #111;
-  background: #fff;
-}
-
 .container {
   max-width: 1100px;
   margin: 0 auto;
   padding: clamp(0.5rem, 2vw, 1rem);
-  box-sizing: border-box;
 }
 
 h1 {
@@ -93,24 +84,6 @@ label {
   margin-bottom: 0.7rem;
 }
 
-input,
-select,
-button {
-  border: 1px solid #000;
-  border-radius: 0;
-  background: #fff;
-  color: #000;
-  padding: 0.45rem;
-  font-size: 0.95rem;
-}
-
-input,
-select {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
 @media (max-width: 600px) {
   .list-toolbar {
     flex-direction: column;
@@ -170,10 +143,6 @@ select {
 
 #message.error {
   color: #9b111e;
-}
-
-.hidden {
-  display: none;
 }
 
 #tap-btn.scanning {

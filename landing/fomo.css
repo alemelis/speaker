@@ -1,0 +1,114 @@
+:root {
+  color-scheme: light;
+  --bg: #fff;
+  --panel: #fff;
+  --text: #000;
+  --muted: #444;
+  --border: #000;
+  --accent: #000;
+  --danger: #000;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.45rem 0.7rem;
+  border-radius: 0;
+  cursor: pointer;
+  transition: none;
+  font-size: 0.95rem;
+}
+
+button:hover {
+  text-decoration: underline;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0.55rem 0.7rem;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.95rem;
+  transition: none;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+input:focus,
+select:focus {
+  outline: 1px solid var(--border);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.topbar a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.topbar a:hover {
+  text-decoration: underline;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.message {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  padding: 0.55rem 0.7rem;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  pointer-events: none;
+}
+
+.message.visible {
+  opacity: 1;
+}
+
+.message.error {
+  border-left-color: var(--danger);
+}

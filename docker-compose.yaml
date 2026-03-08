@@ -26,8 +26,8 @@ services:
 
     metadata-webui:
         build:
-            context: metadata-webui
-            dockerfile: Dockerfile
+            context: .
+            dockerfile: metadata-webui/Dockerfile
         container_name: metadata-webui
         ports:
             - "3030:3030"
@@ -45,8 +45,8 @@ services:
 
     tag-organizer:
         build:
-            context: tag-organizer
-            dockerfile: Dockerfile
+            context: .
+            dockerfile: tag-organizer/Dockerfile
         container_name: tag-organizer
         network_mode: host
         restart: unless-stopped
@@ -56,6 +56,24 @@ services:
         volumes:
             - ${SPEAKER_DIR}:/data
             - /var/run/docker.sock:/var/run/docker.sock:ro
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    downloader:
+        build:
+            context: .
+            dockerfile: downloader/Dockerfile
+        container_name: downloader
+        ports:
+            - "3050:3050"
+        restart: unless-stopped
+        environment:
+            SAVE_DIR: /music
+        volumes:
+            - ${ST_SAVE_DIR}:/music
         logging:
             driver: json-file
             options:

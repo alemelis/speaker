@@ -4,10 +4,11 @@ ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+COPY metadata-webui/requirements.txt /app/requirements.txt
 RUN pip install -r /app/requirements.txt
 
-COPY app /app/app
+COPY metadata-webui/app /app/app
+COPY shared/fomo.css /app/app/static/fomo.css
 
 EXPOSE 3030
 
