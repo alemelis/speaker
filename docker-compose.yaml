@@ -42,3 +42,22 @@ services:
             options:
                 max-size: "10m"
                 max-file: "3"
+
+    tag-organizer:
+        build:
+            context: tag-organizer
+            dockerfile: Dockerfile
+        container_name: tag-organizer
+        network_mode: host
+        restart: unless-stopped
+        environment:
+            TAGS_FILE: /data/tags.yaml
+            OWNTONE_API: ${OWNTONE_API}
+        volumes:
+            - ${SPEAKER_DIR}:/data
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "3"

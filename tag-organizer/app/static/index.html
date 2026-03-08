@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RFID Tag Organizer</title>
+  <link rel="stylesheet" href="style.css?v=20260304c">
+</head>
+<body>
+  <main class="container">
+    <h1>RFID Tag Organizer</h1>
+
+    <section id="list-view">
+      <div class="list-toolbar">
+        <h2>Current Tags</h2>
+        <div class="list-toolbar-right">
+          <input id="tags-search-input" type="search" placeholder="Search tags…" aria-label="Search current tags">
+          <button id="open-add-btn" type="button">Add tag</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tag ID</th>
+            <th>Type</th>
+            <th>Query text</th>
+            <th class="col-raw">Raw query</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="tags-body"></tbody>
+      </table>
+      </div>
+    </section>
+
+    <section id="add-view" class="hidden">
+      <div class="row">
+        <h2>Add Tag</h2>
+        <button id="back-btn" type="button">Back</button>
+      </div>
+
+      <form id="add-form">
+        <label>
+          Tag ID
+          <div class="row">
+            <input id="tag-id-input" name="tag_id" required>
+            <button id="tap-btn" type="button">Tap a tag</button>
+          </div>
+          <span id="tap-status"></span>
+        </label>
+
+        <label>
+          Type
+          <select id="kind-select" name="kind">
+            <option value="track">Track</option>
+            <option value="album">Album</option>
+          </select>
+        </label>
+
+        <label>
+          Search track/album
+          <div class="row">
+            <input id="search-input" name="search_query" placeholder="Type to search...">
+            <button id="search-btn" type="button">Search</button>
+          </div>
+        </label>
+
+        <ul id="results-list"></ul>
+
+        <label>
+          Query text (used to build tags.yaml query)
+          <input id="query-text-input" name="query_text" required>
+        </label>
+
+        <p id="query-preview"></p>
+
+        <div class="row">
+          <button id="save-btn" type="submit">Save tag</button>
+        </div>
+      </form>
+    </section>
+
+    <p id="message"></p>
+  </main>
+  <script src="app.js?v=20260304c"></script>
+</body>
+</html>

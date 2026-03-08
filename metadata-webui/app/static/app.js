@@ -45,7 +45,7 @@ function errorToString(err) {
 }
 
 function sendFrontendLog(payload) {
-  fetch("/api/frontend-log", {
+  fetch("api/frontend-log", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -177,7 +177,7 @@ function populateEditorForm(tags) {
 }
 
 async function loadIndex() {
-  const data = await api("/api/index");
+  const data = await api("api/index");
   state.index = data;
   state.filtered = [...data];
   renderTable();
@@ -185,7 +185,7 @@ async function loadIndex() {
 }
 
 async function openEditor(path) {
-  const data = await api(`/api/track?path=${encodeURIComponent(path)}`);
+  const data = await api(`api/track?path=${encodeURIComponent(path)}`);
   state.activePath = data.path;
   editorPath.textContent = data.path;
   populateEditorForm(data.tags || {});
@@ -198,7 +198,7 @@ async function saveTrack(event) {
     return;
   }
   const tags = formValuesToTags(trackForm);
-  await api("/api/track", {
+  await api("api/track", {
     method: "PATCH",
     body: JSON.stringify({
       path: state.activePath,
@@ -219,7 +219,7 @@ async function applyBatch(event) {
 
   setBatchLoading(true);
   try {
-    await api("/api/batch", {
+    await api("api/batch", {
       method: "POST",
       body: JSON.stringify({
         paths: Array.from(state.selectedPaths),
@@ -235,7 +235,7 @@ async function applyBatch(event) {
 }
 
 async function triggerRescan() {
-  const result = await api("/api/rescan", { method: "POST" });
+  const result = await api("api/rescan", { method: "POST" });
   if (result.ok) {
     showMessage("Owntone rescan triggered.");
     return;

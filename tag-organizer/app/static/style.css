@@ -1,0 +1,190 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  color: #111;
+  background: #fff;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: clamp(0.5rem, 2vw, 1rem);
+  box-sizing: border-box;
+}
+
+h1 {
+  margin: 0 0 1rem;
+  font-size: 1.3rem;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.list-toolbar h2 {
+  margin: 0;
+}
+
+.list-toolbar-right {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+#tags-search-input {
+  max-width: 16rem;
+  min-width: 8rem;
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td.col-raw,
+th.col-raw {
+  word-break: break-all;
+  white-space: normal;
+  max-width: 20em;
+}
+
+th,
+td {
+  border: 1px solid #000;
+  padding: 0.45rem;
+  vertical-align: top;
+  text-align: left;
+}
+
+form {
+  border: 1px solid #000;
+  padding: 0.75rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.7rem;
+}
+
+input,
+select,
+button {
+  border: 1px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  padding: 0.45rem;
+  font-size: 0.95rem;
+}
+
+input,
+select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .list-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .list-toolbar-right {
+    flex-direction: column;
+    justify-content: stretch;
+  }
+
+  #tags-search-input {
+    max-width: none;
+    min-width: 0;
+  }
+}
+
+#results-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.7rem;
+  border: 1px solid #000;
+  max-height: 220px;
+  overflow: auto;
+}
+
+#results-list li {
+  border-bottom: 1px solid #000;
+}
+
+#results-list li:last-child {
+  border-bottom: 0;
+}
+
+#results-list button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+}
+
+#results-list .no-results {
+  padding: 0.5rem;
+  color: #666;
+  font-style: italic;
+}
+
+#query-preview {
+  margin: 0 0 0.7rem;
+  font-family: "Courier New", Courier, monospace;
+  word-break: break-all;
+}
+
+#message {
+  margin-top: 0.8rem;
+  min-height: 1.2rem;
+}
+
+#message.error {
+  color: #9b111e;
+}
+
+.hidden {
+  display: none;
+}
+
+#tap-btn.scanning {
+  background: #000;
+  color: #fff;
+}
+
+#tap-status {
+  display: block;
+  font-size: 0.85rem;
+  color: #555;
+  margin-top: 0.25rem;
+  min-height: 1em;
+}

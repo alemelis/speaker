@@ -28,17 +28,27 @@ KEYMAP = {
 
 class Player():
     def __init__(self):
-        try:
-            with open(TAGS_FILE, "r") as f:
-                self.tags = yaml.safe_load(f)
-            logging.info(f"Loaded {len(self.tags)} tags")
-
-        except Exception as e:
-            logging.error(f"Failed to load {TAGS_FILE}: {e}")
-            sys.exit(1)
+        self.tags = {}
+        self._tags_mtime = None
+        self._load_tags(initial=True)
 
         self.tag = None
         self.time = time.time()
+
+    def _load_tags(self, initial=False):
+        try:
+            mtime = os.path.getmtime(TAGS_FILE)
+            if mtime == self._tags_mtime:
+                return
+            with open(TAGS_FILE, "r") as f:
+                self.tags = yaml.safe_load(f) or {}
+            self._tags_mtime = mtime
+            logging.info(f"Loaded {len(self.tags)} tags from {TAGS_FILE}")
+        except Exception as e:
+            if initial:
+                logging.error(f"Failed to load {TAGS_FILE}: {e}")
+                sys.exit(1)
+            logging.error(f"Failed to reload {TAGS_FILE}: {e}")
 
     @classmethod
     def stop_playback(cls):
@@ -81,6 +91,7 @@ class Player():
             logging.error(f"Failed to toggle shuffle: {e}")
 
     def read_tag(self, tag_id):
+        self._load_tags()
         now = time.time()
         if tag_id != self.tag or (now - self.time > 30.0):
             self.time = time.time()
