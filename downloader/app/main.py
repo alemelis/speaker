@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
@@ -193,6 +194,8 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
     done = 0
     log_lines: list[str] = []
     dst: Path | None = None
+    # matches "[download] Downloading item 3 of 13"
+    _item_re = re.compile(r"\[download\] Downloading item (\d+) of (\d+)")
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -204,14 +207,25 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
     async for raw in process.stdout:
         line = raw.decode(errors="replace").rstrip()
         log_lines.append(line)
-        if line.startswith("[ExtractAudio] Destination:"):
-            dst = Path(line.split(":", 1)[1].strip())
-            done += 1
-            yield _sse("progress", json.dumps({"done": done, "total": total}))
-        elif line.startswith("[ExtractAudio] Not converting audio"):
-            dst = Path(line.split(";")[0].split()[-1].strip())
-            done += 1
-            yield _sse("progress", json.dumps({"done": done, "total": total}))
+        log.debug("yt-dlp: %s", line)
+        if req.playlist:
+            # "Downloading item N of M" fires at the start of each item;
+            # when we see item N > 1 starting, item N-1 just finished.
+            m = _item_re.search(line)
+            if m:
+                n = int(m.group(1))
+                if n > 1 and n - 1 > done:
+                    done = n - 1
+                    yield _sse("progress", json.dumps({"done": done, "total": total}))
+        else:
+            if line.startswith("[ExtractAudio] Destination:"):
+                dst = Path(line.split(":", 1)[1].strip())
+                done += 1
+                yield _sse("progress", json.dumps({"done": done, "total": total}))
+            elif line.startswith("[ExtractAudio] Not converting audio"):
+                dst = Path(line.split(";")[0].split()[-1].strip())
+                done += 1
+                yield _sse("progress", json.dumps({"done": done, "total": total}))
 
     await process.wait()
 
@@ -219,6 +233,10 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
         log.error("download failed (rc=%d):\n%s", process.returncode, "\n".join(log_lines))
         yield _sse("error", "\n".join(log_lines))
         return
+
+    # Ensure bar always reaches 100% regardless of which yt-dlp lines were seen
+    if req.playlist and done < total:
+        yield _sse("progress", json.dumps({"done": total, "total": total}))
 
     if req.playlist:
         m3u_path = savedir / f"{dirname}.m3u"
