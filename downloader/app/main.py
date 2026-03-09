@@ -1,20 +1,29 @@
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("fomo")
 
 
 class SPAStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope: dict[str, Any]):  # type: ignore[override]
         response = await super().get_response(path, scope)
         if response.status_code == 404:
-            return await super().get_response("index.html", scope)
+            response = await super().get_response("index.html", scope)
+        response.headers["Cache-Control"] = "no-store"
         return response
 
 
@@ -43,10 +52,19 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = FastAPI(title="FOMO Downloader")
 
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    log.info("%s %s", request.method, request.url.path)
+    response = await call_next(request)
+    log.info("%s %s -> %s", request.method, request.url.path, response.status_code)
+    return response
+
+
 @app.post("/api/search")
 async def search(req: SearchRequest):
     from youtubesearchpython import VideosSearch, PlaylistsSearch  # noqa: PLC0415
 
+    log.info("search query=%r max_results=%d", req.query, req.max_results)
     half = max(req.max_results // 2, 3)
 
     def _videos():
@@ -55,10 +73,14 @@ async def search(req: SearchRequest):
     def _playlists():
         return PlaylistsSearch(req.query, limit=half).result()
 
-    vs, ps = await asyncio.gather(
-        asyncio.to_thread(_videos),
-        asyncio.to_thread(_playlists),
-    )
+    try:
+        vs, ps = await asyncio.gather(
+            asyncio.to_thread(_videos),
+            asyncio.to_thread(_playlists),
+        )
+    except Exception as exc:
+        log.exception("search failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     videos = [
         {
@@ -80,11 +102,13 @@ async def search(req: SearchRequest):
         }
         for p in ps.get("result", [])
     ]
+    log.info("search done: %d videos, %d playlists", len(videos), len(playlists))
     return {"videos": videos, "playlists": playlists}
 
 
 @app.post("/api/playlist-info")
 async def playlist_info(req: PlaylistInfoRequest):
+    log.info("playlist-info url=%r", req.url)
     proc = await asyncio.create_subprocess_exec(
         "yt-dlp", "--flat-playlist", "-J", "--no-warnings", req.url,
         stdout=asyncio.subprocess.PIPE,
@@ -92,17 +116,24 @@ async def playlist_info(req: PlaylistInfoRequest):
     )
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
-        raise HTTPException(status_code=400, detail=stderr.decode(errors="replace"))
+        err = stderr.decode(errors="replace")
+        log.error("playlist-info failed: %s", err)
+        raise HTTPException(status_code=400, detail=err)
     data = json.loads(stdout)
     entries = [
         {"index": i, "title": entry.get("title", f"Track {i}")}
         for i, entry in enumerate(data.get("entries", []), 1)
     ]
+    log.info("playlist-info done: %d entries", len(entries))
     return {"entries": entries}
 
 
 @app.post("/api/download")
 async def download(req: DownloadRequest) -> StreamingResponse:
+    log.info(
+        "download url=%r artist=%r album=%r title=%r playlist=%s delay=%d",
+        req.url, req.artist, req.album, req.title, req.playlist, req.delay,
+    )
     return StreamingResponse(
         _run_download(req),
         media_type="text/event-stream",
@@ -185,6 +216,7 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
     await process.wait()
 
     if process.returncode != 0:
+        log.error("download failed (rc=%d):\n%s", process.returncode, "\n".join(log_lines))
         yield _sse("error", "\n".join(log_lines))
         return
 
@@ -210,6 +242,7 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
             yield _sse("error", "\n".join(trim_log))
             return
 
+    log.info("download done: %s", dst)
     yield _sse("done", "")
 
 
