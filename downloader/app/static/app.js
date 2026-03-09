@@ -1,5 +1,77 @@
 'use strict';
 
+// --- Search ---
+
+const searchInput   = document.getElementById('search-input');
+const searchBtn     = document.getElementById('search-btn');
+const searchResults = document.getElementById('search-results');
+
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+searchBtn.addEventListener('click', doSearch);
+
+async function doSearch() {
+  const query = searchInput.value.trim();
+  if (!query) return;
+
+  searchBtn.disabled = true;
+  searchBtn.textContent = 'Searching...';
+  searchResults.classList.remove('hidden');
+  document.getElementById('search-playlists').innerHTML = '<p class="search-loading">Searching...</p>';
+  document.getElementById('search-videos').innerHTML = '';
+
+  try {
+    const res = await fetch('api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) {
+      document.getElementById('search-playlists').innerHTML = '<p class="search-error">Search failed.</p>';
+      return;
+    }
+    const { videos, playlists } = await res.json();
+    renderResultGroup(document.getElementById('search-playlists'), playlists, true);
+    renderResultGroup(document.getElementById('search-videos'), videos, false);
+  } catch (err) {
+    document.getElementById('search-playlists').innerHTML = `<p class="search-error">${err.message}</p>`;
+  } finally {
+    searchBtn.disabled = false;
+    searchBtn.textContent = 'Search';
+  }
+}
+
+function renderResultGroup(container, results, isPlaylist) {
+  if (!results.length) {
+    container.innerHTML = '<p class="search-empty">No results.</p>';
+    return;
+  }
+  container.innerHTML = '';
+  results.forEach(r => {
+    const item = document.createElement('div');
+    item.className = 'search-result';
+    const sub = isPlaylist ? '' : `${r.channel}${r.duration ? ' · ' + r.duration : ''}`;
+    item.innerHTML = `
+      <img class="search-thumb" src="${r.thumbnail}" alt="" loading="lazy">
+      <div class="search-meta">
+        <span class="search-title">${r.title}</span>
+        ${sub ? `<span class="search-sub">${sub}</span>` : ''}
+      </div>`;
+    item.addEventListener('click', () => {
+      document.getElementById('url-input').value = r.url;
+      if (!isPlaylist) document.getElementById('title-input').value = r.title;
+      if (isPlaylist && !playlistCheck.checked) {
+        playlistCheck.checked = true;
+        playlistCheck.dispatchEvent(new Event('change'));
+      }
+      searchResults.classList.add('hidden');
+      searchInput.value = '';
+    });
+    container.appendChild(item);
+  });
+}
+
+// --- Download form ---
+
 const form          = document.getElementById('dl-form');
 const playlistCheck = document.getElementById('playlist-check');
 const titleField    = document.getElementById('title-field');

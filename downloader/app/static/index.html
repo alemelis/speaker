@@ -13,6 +13,22 @@
   </header>
 
   <main class="dl-container">
+    <!-- Search -->
+    <div class="search-bar">
+      <input id="search-input" type="text" placeholder="Search YouTube...">
+      <button id="search-btn" type="button">Search</button>
+    </div>
+    <section id="search-results" class="hidden">
+      <div class="search-group">
+        <h3 class="search-group-label">Playlists</h3>
+        <div id="search-playlists"></div>
+      </div>
+      <div class="search-group">
+        <h3 class="search-group-label">Videos</h3>
+        <div id="search-videos"></div>
+      </div>
+    </section>
+
     <form id="dl-form">
       <label>
         URL

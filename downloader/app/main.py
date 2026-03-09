@@ -18,6 +18,11 @@ class SPAStaticFiles(StaticFiles):
         return response
 
 
+class SearchRequest(BaseModel):
+    query: str
+    max_results: int = 8
+
+
 class PlaylistInfoRequest(BaseModel):
     url: str
 
@@ -36,6 +41,46 @@ SAVE_DIR = Path(os.getenv("SAVE_DIR", "/music"))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="FOMO Downloader")
+
+
+@app.post("/api/search")
+async def search(req: SearchRequest):
+    from youtubesearchpython import VideosSearch, PlaylistsSearch  # noqa: PLC0415
+
+    half = max(req.max_results // 2, 3)
+
+    def _videos():
+        return VideosSearch(req.query, limit=half).result()
+
+    def _playlists():
+        return PlaylistsSearch(req.query, limit=half).result()
+
+    vs, ps = await asyncio.gather(
+        asyncio.to_thread(_videos),
+        asyncio.to_thread(_playlists),
+    )
+
+    videos = [
+        {
+            "type": "video",
+            "url": v["link"],
+            "title": v.get("title", ""),
+            "channel": (v.get("channel") or {}).get("name", ""),
+            "duration": v.get("duration", ""),
+            "thumbnail": ((v.get("thumbnails") or [{}])[0]).get("url", ""),
+        }
+        for v in vs.get("result", [])
+    ]
+    playlists = [
+        {
+            "type": "playlist",
+            "url": p["link"],
+            "title": p.get("title", ""),
+            "thumbnail": ((p.get("thumbnails") or [{}])[0]).get("url", ""),
+        }
+        for p in ps.get("result", [])
+    ]
+    return {"videos": videos, "playlists": playlists}
 
 
 @app.post("/api/playlist-info")
