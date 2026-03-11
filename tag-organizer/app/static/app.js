@@ -259,5 +259,36 @@ tagsBody.addEventListener("click", async (event) => {
   }
 });
 
+const playsBody = document.getElementById("plays-body");
+
+function renderPlays(plays) {
+  playsBody.innerHTML = "";
+  if (plays.length === 0) {
+    const row = document.createElement("tr");
+    row.innerHTML = '<td colspan="3">No plays yet.</td>';
+    playsBody.appendChild(row);
+    return;
+  }
+  for (const p of plays) {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${p.query}</td>
+      <td>${p.kind}</td>
+      <td>${p.played_at}</td>
+    `;
+    playsBody.appendChild(row);
+  }
+}
+
+async function loadPlays() {
+  try {
+    const plays = await api("api/plays?limit=30");
+    renderPlays(plays);
+  } catch (err) {
+    // Non-critical; don't surface error
+  }
+}
+
 setView("list");
 loadTags().catch((err) => showMessage(err.message, true));
+loadPlays();

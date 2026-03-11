@@ -4,10 +4,12 @@ ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+COPY tag-organizer/requirements.txt /app/requirements.txt
 RUN pip install -r /app/requirements.txt
 
-COPY app /app/app
+COPY tag-organizer/app /app/app
+COPY shared/fomo.css /app/app/static/fomo.css
+COPY shared/db.py /app/db.py
 
 EXPOSE 3040
 

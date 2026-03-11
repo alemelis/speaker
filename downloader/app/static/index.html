@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FOMO Downloader</title>
+  <link rel="stylesheet" href="fomo.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="/">FOMO</a> / Download</h1>
+  </header>
+
+  <main class="dl-container">
+    <!-- Search -->
+    <div class="search-bar">
+      <input id="search-input" type="text" placeholder="Search YouTube...">
+      <button id="search-btn" type="button">Search</button>
+    </div>
+    <section id="search-results" class="hidden">
+      <div class="search-group">
+        <h3 class="search-group-label">Playlists</h3>
+        <div id="search-playlists"></div>
+      </div>
+      <div class="search-group">
+        <h3 class="search-group-label">Videos</h3>
+        <div id="search-videos"></div>
+      </div>
+    </section>
+
+    <form id="dl-form">
+      <label>
+        URL
+        <input id="url-input" name="url" type="url" placeholder="https://youtube.com/watch?v=..." required>
+      </label>
+
+      <label class="checkbox-label">
+        <input id="playlist-check" name="playlist" type="checkbox">
+        Playlist mode
+      </label>
+
+      <label id="title-field">
+        Title
+        <input id="title-input" name="title" type="text" placeholder="Leave blank to use video title">
+      </label>
+
+      <label>
+        Artist
+        <input id="artist-input" name="artist" type="text">
+      </label>
+
+      <label>
+        Album
+        <input id="album-input" name="album" type="text">
+      </label>
+
+      <label id="delay-field">
+        Delay trim (seconds)
+        <input id="delay-input" name="delay" type="number" value="0" min="0">
+      </label>
+
+      <div class="form-actions">
+        <button id="fetch-btn" type="button" class="hidden">Fetch tracks</button>
+        <button id="submit-btn" type="submit">Download</button>
+      </div>
+    </form>
+
+    <!-- Playlist track selection -->
+    <section id="track-section" class="hidden">
+      <div class="track-header">
+        <span id="track-count"></span>
+        <div class="track-header-actions">
+          <button id="sel-all-btn" type="button">All</button>
+          <button id="sel-none-btn" type="button">None</button>
+        </div>
+      </div>
+      <ul id="track-list"></ul>
+      <button id="dl-selected-btn" type="button">Download selected</button>
+    </section>
+
+    <!-- Progress -->
+    <div id="progress-section" class="hidden">
+      <div id="spinner" class="spinner hidden"></div>
+      <div id="bar-wrap" class="hidden">
+        <div id="bar-track">
+          <div id="bar-fill"></div>
+        </div>
+        <span id="bar-label"></span>
+      </div>
+    </div>
+
+    <ul id="warn-log" class="warn-list hidden"></ul>
+    <pre id="error-log" class="output hidden"></pre>
+    <p id="status-msg" class="status hidden"></p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

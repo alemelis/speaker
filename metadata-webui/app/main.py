@@ -1,14 +1,15 @@
+import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .indexer import get_index, rebuild, update_one
+from .indexer import get_index, rebuild, remove_one, update_one
 from .metadata import read_tags, validate_path, write_tags
 from .owntone import trigger_rescan
 
@@ -31,6 +32,10 @@ class BatchPatchRequest(BaseModel):
     tags: dict[str, Any] = Field(default_factory=dict)
 
 
+class ProbeRequest(BaseModel):
+    paths: list[str] = Field(default_factory=list)
+
+
 class FrontendLogRequest(BaseModel):
     level: str = "error"
     message: str
@@ -42,6 +47,22 @@ class FrontendLogRequest(BaseModel):
 MUSIC_ROOT = Path(os.getenv("MUSIC_ROOT", "/music"))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 logger = logging.getLogger("metadata-webui.frontend")
+
+
+async def _probe_file(abs_path: Path) -> str | None:
+    """Run ffprobe on a file. Returns an error string, or None if clean."""
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe", "-v", "error",
+        "-show_entries", "stream=codec_name,duration",
+        "-of", "json", str(abs_path),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    err = stderr.decode(errors="replace").strip()
+    if proc.returncode != 0 or err:
+        return err or "ffprobe check failed"
+    return None
 
 
 @asynccontextmanager
@@ -88,6 +109,27 @@ def patch_batch_endpoint(payload: BatchPatchRequest) -> dict[str, Any]:
 @api_router.post("/rescan")
 def rescan_endpoint() -> dict[str, Any]:
     return trigger_rescan()
+
+
+@api_router.post("/probe")
+async def probe_endpoint(payload: ProbeRequest) -> dict[str, Any]:
+    results: dict[str, Any] = {}
+    for path in payload.paths:
+        try:
+            abs_path = validate_path(path, MUSIC_ROOT)
+            error = await _probe_file(abs_path)
+            results[path] = {"ok": error is None, "error": error}
+        except HTTPException as exc:
+            results[path] = {"ok": False, "error": exc.detail}
+    return {"results": results}
+
+
+@api_router.delete("/track")
+def delete_track_endpoint(path: str) -> dict[str, Any]:
+    abs_path = validate_path(path, MUSIC_ROOT)
+    abs_path.unlink()
+    remove_one(path)
+    return {"ok": True, "path": path}
 
 
 @api_router.post("/frontend-log")

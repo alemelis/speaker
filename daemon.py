@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-import yaml
 import logging
+import os
 import sys
 import time
+
+import db
 import requests
-from evdev import list_devices, InputDevice, ecodes
-import os
+from evdev import InputDevice, ecodes, list_devices
 
 # ---------------- CONFIG ----------------
-TAGS_FILE = os.getenv("TAGS_FILE", "./tags.yaml")
+FOMO_DB = os.getenv("FOMO_DB", "./fomo.db")
 OWNTONE_API = os.getenv("OWNTONE_API")
 # ----------------------------------------
 
@@ -28,27 +29,10 @@ KEYMAP = {
 
 class Player():
     def __init__(self):
-        self.tags = {}
-        self._tags_mtime = None
-        self._load_tags(initial=True)
-
+        self.conn = db.connect(FOMO_DB)
+        logging.info(f"Connected to DB: {FOMO_DB}")
         self.tag = None
         self.time = time.time()
-
-    def _load_tags(self, initial=False):
-        try:
-            mtime = os.path.getmtime(TAGS_FILE)
-            if mtime == self._tags_mtime:
-                return
-            with open(TAGS_FILE, "r") as f:
-                self.tags = yaml.safe_load(f) or {}
-            self._tags_mtime = mtime
-            logging.info(f"Loaded {len(self.tags)} tags from {TAGS_FILE}")
-        except Exception as e:
-            if initial:
-                logging.error(f"Failed to load {TAGS_FILE}: {e}")
-                sys.exit(1)
-            logging.error(f"Failed to reload {TAGS_FILE}: {e}")
 
     @classmethod
     def stop_playback(cls):
@@ -59,49 +43,47 @@ class Player():
         except Exception as e:
             logging.error(f"Failed to stop playback: {e}")
 
-    def search(self, query):
-        logging.info(f"Looking for {query}")
+    def enqueue(self, kind, query):
+        field = "title" if kind == "track" else "album"
+        expression = f'{field} is "{query}"'
+        logging.info(f"Enqueueing: {expression}")
         try:
-            resp = requests.get(f"{OWNTONE_API}/search?type={query}&limit=1")
-            resp.raise_for_status()  # good habit
-
-            thing_id = resp.json()
-            logging.info(thing_id)
-            if "tracks" in query:
-                return thing_id['tracks']["items"][0]['uri']
-            return thing_id['albums']["items"][0]['uri']
+            r = requests.post(
+                f"{OWNTONE_API}/queue/items/add",
+                params={"expression": expression},
+            )
+            r.raise_for_status()
+            items = r.json().get("items", [])
+            if items:
+                return items[0]["id"]
+            logging.warning(f"No items matched expression: {expression}")
         except Exception as e:
-            logging.error(f"Failed to search {query}: {e}")
+            logging.error(f"Failed to enqueue: {e}")
+        return None
 
-    def start_playback(self, url):
-        self.stop_playback()
-        logging.info(f"Starting playback: {url}")
+    def play_from(self, item_id):
         try:
-            r = requests.post(f"{OWNTONE_API}/queue/items/add", params={"uris": url})
-            logging.info(f"Queue add response: {r.status_code}")
-            requests.put(f"{OWNTONE_API}/player/play")
+            requests.put(f"{OWNTONE_API}/player/play", params={"item_id": item_id})
         except Exception as e:
-            logging.error(f"Failed to add to queue: {e}")
-
-    def toggle_shuffle(self, val: bool):
-        logging.info(f"Setting shuffle to {val}")
-        try:
-            requests.put(f"{OWNTONE_API}/api/player/shuffle?state={val}")
-        except Exception as e:
-            logging.error(f"Failed to toggle shuffle: {e}")
+            logging.error(f"Failed to play: {e}")
 
     def read_tag(self, tag_id):
-        self._load_tags()
         now = time.time()
         if tag_id != self.tag or (now - self.time > 30.0):
             self.time = time.time()
-            query = self.tags.get(int(tag_id))
-            url = self.search(query)
-            if url:
-                self.start_playback(url)
-                self.tag = tag_id
-            else:
+            row = db.get_tag(self.conn, tag_id)
+            if row is None:
                 logging.warning(f"Unknown tag: {tag_id}")
+                return
+            kind, query = row["kind"], row["query"]
+            item_id = self.enqueue(kind, query)
+            if item_id:
+                self.play_from(item_id)
+                self.tag = tag_id
+                db.log_play(self.conn, tag_id, kind, query)
+            else:
+                logging.warning(f"No result for tag: {tag_id}")
+
 
 class Reader():
     def __init__(self):

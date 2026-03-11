@@ -1,16 +1,20 @@
 import os
 import re
 import socket
+import sys
+import threading
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Any
-from urllib.parse import quote_plus, unquote_plus
+from urllib.parse import quote_plus
 
 import requests
-import yaml
+
+sys.path.insert(0, "/app")
+import db
+
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class SPAStaticFiles(StaticFiles):
@@ -41,12 +45,11 @@ class UpsertTagRequest(BaseModel):
     query_text: str
 
 
-TAGS_FILE = Path(os.getenv("TAGS_FILE", "/data/tags.yaml"))
+FOMO_DB = os.getenv("FOMO_DB", "/data/fomo.db")
 OWNTONE_API = os.getenv("OWNTONE_API", "").rstrip("/")
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DOCKER_SOCKET = "/var/run/docker.sock"
 RFID_CONTAINER = os.getenv("RFID_CONTAINER", "rfid-daemon")
-# Matches lines like: 2026-03-04T... [WARNING] Unknown tag: 1234567890
 _UNKNOWN_TAG_RE = re.compile(r"Unknown tag:\s*(\d+)")
 
 TRACK_PREFIX = "tracks&query="
@@ -55,38 +58,13 @@ ALBUM_PREFIX = "albums&query="
 app = FastAPI(title="RFID Tag Organizer")
 api_router = APIRouter(prefix="/api")
 
-
-def _read_tags_map() -> dict[int | str, str]:
-    if not TAGS_FILE.exists():
-        return {}
-    with TAGS_FILE.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=500, detail="tags.yaml must contain a mapping.")
-    return data
+_local = threading.local()
 
 
-def _coerce_key(tag_id: str) -> int | str:
-    try:
-        return int(tag_id)
-    except ValueError:
-        return tag_id
-
-
-def _save_tags_map(data: dict[int | str, str]) -> None:
-    TAGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile("w", delete=False, dir=str(TAGS_FILE.parent), encoding="utf-8") as tmp:
-        yaml.safe_dump(data, tmp, sort_keys=False, allow_unicode=True)
-        temp_name = tmp.name
-    Path(temp_name).replace(TAGS_FILE)
-
-
-def _parse_query(raw_query: str) -> tuple[str, str]:
-    if raw_query.startswith(TRACK_PREFIX):
-        return "track", unquote_plus(raw_query[len(TRACK_PREFIX):])
-    if raw_query.startswith(ALBUM_PREFIX):
-        return "album", unquote_plus(raw_query[len(ALBUM_PREFIX):])
-    return "unknown", raw_query
+def get_conn():
+    if not hasattr(_local, "conn"):
+        _local.conn = db.connect(FOMO_DB)
+    return _local.conn
 
 
 def _build_query(kind: str, query_text: str) -> str:
@@ -99,27 +77,18 @@ def _build_query(kind: str, query_text: str) -> str:
     raise HTTPException(status_code=400, detail="kind must be 'track' or 'album'.")
 
 
-def _sort_key(item: tuple[int | str, str]) -> tuple[int, str]:
-    key = str(item[0])
-    return (0, f"{int(key):020d}") if key.isdigit() else (1, key)
-
-
 @api_router.get("/tags")
 def list_tags() -> list[TagMapping]:
-    mappings = _read_tags_map()
-    rows: list[TagMapping] = []
-    for tag_id, raw_query in sorted(mappings.items(), key=_sort_key):
-        raw_text = str(raw_query)
-        kind, query_text = _parse_query(raw_text)
-        rows.append(
-            TagMapping(
-                tag_id=str(tag_id),
-                query_raw=raw_text,
-                kind=kind,
-                query_text=query_text,
-            )
+    rows = db.all_tags(get_conn())
+    return [
+        TagMapping(
+            tag_id=row["tag_id"],
+            query_raw=_build_query(row["kind"], row["query"]),
+            kind=row["kind"],
+            query_text=row["query"],
         )
-    return rows
+        for row in rows
+    ]
 
 
 @api_router.get("/search")
@@ -183,26 +152,23 @@ def upsert_tag(payload: UpsertTagRequest) -> dict[str, Any]:
     if not query_text:
         raise HTTPException(status_code=400, detail="query_text is required.")
 
-    query_raw = _build_query(payload.kind, query_text)
-    mappings = _read_tags_map()
-    mappings[_coerce_key(tag_id)] = query_raw
-    _save_tags_map(mappings)
-    return {"ok": True, "tag_id": tag_id, "query_raw": query_raw}
+    kind = payload.kind.strip().lower()
+    if kind not in {"track", "album"}:
+        raise HTTPException(status_code=400, detail="kind must be 'track' or 'album'.")
+
+    db.upsert_tag(get_conn(), tag_id, kind, query_text)
+    return {"ok": True, "tag_id": tag_id, "query_raw": _build_query(kind, query_text)}
 
 
 @api_router.delete("/tags/{tag_id}")
 def delete_tag(tag_id: str) -> dict[str, Any]:
-    mappings = _read_tags_map()
-    key = _coerce_key(tag_id)
-    if key not in mappings:
+    found = db.delete_tag(get_conn(), tag_id)
+    if not found:
         raise HTTPException(status_code=404, detail="Tag ID not found.")
-    del mappings[key]
-    _save_tags_map(mappings)
     return {"ok": True, "tag_id": tag_id}
 
 
 def _docker_logs(container: str, tail: int = 200) -> str:
-    """Fetch the last *tail* log lines from a container via the Docker socket."""
     if not os.path.exists(DOCKER_SOCKET):
         raise HTTPException(status_code=503, detail="Docker socket not available.")
     request = (
@@ -219,10 +185,7 @@ def _docker_logs(container: str, tail: int = 200) -> str:
                 break
             chunks.append(chunk)
     raw = b"".join(chunks)
-    # Strip HTTP headers (everything before the first blank line)
     _, _, body = raw.partition(b"\r\n\r\n")
-    # Docker multiplexed stream: each log frame has an 8-byte header;
-    # strip them so we get plain text.
     text_parts: list[str] = []
     pos = 0
     while pos + 8 <= len(body):
@@ -235,7 +198,6 @@ def _docker_logs(container: str, tail: int = 200) -> str:
 
 @api_router.get("/unknown-tags")
 def unknown_tags(tail: int = 200) -> list[str]:
-    """Return tag IDs seen in rfid-daemon logs that are not yet in tags.yaml."""
     try:
         log_text = _docker_logs(RFID_CONTAINER, tail)
     except HTTPException:
@@ -247,18 +209,25 @@ def unknown_tags(tail: int = 200) -> list[str]:
     if not found:
         return []
 
-    try:
-        known = set(str(k) for k in _read_tags_map().keys())
-    except Exception:
-        known = set()
+    known = {row["tag_id"] for row in db.all_tags(get_conn())}
 
     seen: list[str] = []
     seen_set: set[str] = set()
-    for tag_id in reversed(found):  # most-recent first
+    for tag_id in reversed(found):
         if tag_id not in known and tag_id not in seen_set:
             seen.append(tag_id)
             seen_set.add(tag_id)
     return seen
+
+
+@api_router.get("/plays")
+def get_plays(limit: int = 50) -> list[dict]:
+    return db.recent_plays(get_conn(), limit)
+
+
+@api_router.get("/plays/top")
+def get_top_plays(limit: int = 20) -> list[dict]:
+    return db.play_counts(get_conn(), limit)
 
 
 app.include_router(api_router)

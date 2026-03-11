@@ -2,6 +2,7 @@ const state = {
   index: [],
   filtered: [],
   selectedPaths: new Set(),
+  brokenPaths: new Set(),
   activePath: null,
 };
 
@@ -25,9 +26,12 @@ const batchCount = document.getElementById("batch-count");
 const batchForm = document.getElementById("batch-form");
 const batchLoading = document.getElementById("batch-loading");
 const applySelectedBtn = document.getElementById("apply-selected-btn");
+const probeSelectedBtn = document.getElementById("probe-selected-btn");
+const deleteSelectedBtn = document.getElementById("delete-selected-btn");
 const editorPanel = document.getElementById("editor-panel");
 const editorPath = document.getElementById("editor-path");
 const trackForm = document.getElementById("track-form");
+const deleteTrackBtn = document.getElementById("delete-track-btn");
 const closeEditorBtn = document.getElementById("close-editor-btn");
 const message = document.getElementById("message");
 
@@ -98,10 +102,13 @@ function renderTable() {
   for (const track of state.filtered) {
     const row = document.createElement("tr");
     row.dataset.path = track.path;
+    if (state.brokenPaths.has(track.path)) {
+      row.classList.add("broken");
+    }
 
     row.innerHTML = `
       <td><input type="checkbox" data-path="${track.path}" ${state.selectedPaths.has(track.path) ? "checked" : ""}></td>
-      <td>${track.title || ""}</td>
+      <td>${track.title || ""}${state.brokenPaths.has(track.path) ? ' <span class="broken-badge" title="ffprobe reported errors">!</span>' : ""}</td>
       <td>${track.artist || ""}</td>
       <td>${track.album || ""}</td>
       <td>${track.albumartist || ""}</td>
@@ -234,6 +241,66 @@ async function applyBatch(event) {
   }
 }
 
+async function probeSelected() {
+  const paths = Array.from(state.selectedPaths);
+  if (!paths.length) return;
+
+  probeSelectedBtn.disabled = true;
+  probeSelectedBtn.textContent = "Probing...";
+  try {
+    const result = await api("api/probe", {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    });
+    let broken = 0;
+    for (const [path, info] of Object.entries(result.results || {})) {
+      if (!info.ok) {
+        state.brokenPaths.add(path);
+        broken++;
+      } else {
+        state.brokenPaths.delete(path);
+      }
+    }
+    renderTable();
+    showMessage(broken > 0 ? `${broken} broken file(s) flagged.` : "All files OK.", broken > 0);
+  } finally {
+    probeSelectedBtn.disabled = false;
+    probeSelectedBtn.textContent = "Probe selected";
+  }
+}
+
+async function deleteTrack(path) {
+  if (!confirm(`Delete ${path}?\nThis cannot be undone.`)) return;
+  await api(`api/track?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+  state.selectedPaths.delete(path);
+  state.brokenPaths.delete(path);
+  editorPanel.classList.add("hidden");
+  state.activePath = null;
+  showMessage("Track deleted.");
+  await loadIndex();
+}
+
+async function deleteSelected() {
+  const paths = Array.from(state.selectedPaths);
+  if (!paths.length) return;
+  if (!confirm(`Delete ${paths.length} track(s)?\nThis cannot be undone.`)) return;
+
+  let deleted = 0;
+  for (const path of paths) {
+    try {
+      await api(`api/track?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+      state.selectedPaths.delete(path);
+      state.brokenPaths.delete(path);
+      deleted++;
+    } catch (err) {
+      showMessage(`Failed to delete ${path}: ${err.message}`, true);
+    }
+  }
+  if (deleted > 0) showMessage(`${deleted} track(s) deleted.`);
+  await loadIndex();
+  updateBatchBar();
+}
+
 async function triggerRescan() {
   const result = await api("api/rescan", { method: "POST" });
   if (result.ok) {
@@ -308,6 +375,31 @@ rescanBtn.addEventListener("click", async () => {
       source: "rescan",
       message: errorToString(err),
     });
+    showMessage(err.message, true);
+  }
+});
+probeSelectedBtn.addEventListener("click", async () => {
+  try {
+    await probeSelected();
+  } catch (err) {
+    sendFrontendLog({ level: "error", source: "probeSelected", message: errorToString(err) });
+    showMessage(err.message, true);
+  }
+});
+deleteSelectedBtn.addEventListener("click", async () => {
+  try {
+    await deleteSelected();
+  } catch (err) {
+    sendFrontendLog({ level: "error", source: "deleteSelected", message: errorToString(err) });
+    showMessage(err.message, true);
+  }
+});
+deleteTrackBtn.addEventListener("click", async () => {
+  if (!state.activePath) return;
+  try {
+    await deleteTrack(state.activePath);
+  } catch (err) {
+    sendFrontendLog({ level: "error", source: "deleteTrack", message: errorToString(err) });
     showMessage(err.message, true);
   }
 });

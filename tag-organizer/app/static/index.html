@@ -4,12 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RFID Tag Organizer</title>
-  <link rel="stylesheet" href="style.css?v=20260304c">
+  <link rel="stylesheet" href="fomo.css?v=20260308a">
+  <link rel="stylesheet" href="style.css?v=20260308a">
 </head>
 <body>
-  <main class="container">
-    <h1>RFID Tag Organizer</h1>
+  <header class="topbar">
+    <h1><a href="/">FOMO</a> / Tags</h1>
+  </header>
 
+  <main class="container">
     <section id="list-view">
       <div class="list-toolbar">
         <h2>Current Tags</h2>
@@ -69,7 +72,7 @@
         <ul id="results-list"></ul>
 
         <label>
-          Query text (used to build tags.yaml query)
+          Query text
           <input id="query-text-input" name="query_text" required>
         </label>
 
@@ -82,7 +85,25 @@
     </section>
 
     <p id="message"></p>
+
+    <section id="plays-view">
+      <details>
+        <summary><h2>Play History</h2></summary>
+        <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Query</th>
+              <th>Type</th>
+              <th>When</th>
+            </tr>
+          </thead>
+          <tbody id="plays-body"></tbody>
+        </table>
+        </div>
+      </details>
+    </section>
   </main>
-  <script src="app.js?v=20260304c"></script>
+  <script src="app.js?v=20260308a"></script>
 </body>
 </html>
