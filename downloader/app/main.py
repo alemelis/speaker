@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import os
-import re
+import re as _re
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
@@ -17,6 +17,42 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("fomo")
+
+_ansi_re = _re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(s: str) -> str:
+    return _ansi_re.sub("", s)
+
+
+async def _probe_file(path: Path) -> str | None:
+    """Run ffprobe on path. Returns an error string, or None if clean."""
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe", "-v", "error",
+        "-show_entries", "stream=codec_name,duration",
+        "-of", "json", str(path),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    err = stderr.decode(errors="replace").strip()
+    if proc.returncode != 0 or err:
+        return err or "ffprobe check failed"
+    return None
+
+
+class _Logger:
+    """yt-dlp logger that routes item-level errors to a callback."""
+
+    def __init__(self, on_error):
+        self._on_error = on_error
+
+    def debug(self, msg: str) -> None: pass
+    def info(self, msg: str) -> None: pass
+    def warning(self, msg: str) -> None: pass
+
+    def error(self, msg: str) -> None:
+        self._on_error(_strip_ansi(msg))
 
 
 class SPAStaticFiles(StaticFiles):
@@ -109,18 +145,21 @@ async def search(req: SearchRequest):
 
 @app.post("/api/playlist-info")
 async def playlist_info(req: PlaylistInfoRequest):
+    from yt_dlp import YoutubeDL  # noqa: PLC0415
+
     log.info("playlist-info url=%r", req.url)
-    proc = await asyncio.create_subprocess_exec(
-        "yt-dlp", "--flat-playlist", "-J", "--no-warnings", req.url,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        err = stderr.decode(errors="replace")
-        log.error("playlist-info failed: %s", err)
-        raise HTTPException(status_code=400, detail=err)
-    data = json.loads(stdout)
+
+    def _fetch():
+        opts = {"flat_playlist": True, "quiet": True, "no_warnings": True}
+        with YoutubeDL(opts) as ydl:
+            return ydl.extract_info(req.url, download=False)
+
+    try:
+        data = await asyncio.to_thread(_fetch)
+    except Exception as exc:
+        log.error("playlist-info failed: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     entries = [
         {"index": i, "title": entry.get("title", f"Track {i}")}
         for i, entry in enumerate(data.get("entries", []), 1)
@@ -147,6 +186,9 @@ def _sse(event: str, data: str) -> str:
 
 
 async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
+    from yt_dlp import YoutubeDL  # noqa: PLC0415
+    import yt_dlp.utils  # noqa: PLC0415
+
     artist = req.artist.strip()
     album = req.album.strip()
     title = req.title.strip()
@@ -161,106 +203,131 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
         output_template = title if title else "%(title)s"
 
     savedir.mkdir(parents=True, exist_ok=True)
+    before_files = set(savedir.glob("*.m4a"))
 
-    metadata = ["--embed-metadata", "--embed-thumbnail"]
-    ffmpeg_args = []
+    queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_event_loop()
+    state = {"done": 0, "total": len(req.selected_items) if req.playlist and req.selected_items else 1}
 
+    def on_item_error(msg: str) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, {"type": "warn", "msg": msg})
+
+    def progress_hook(d):
+        status = d.get("status")
+        if status == "finished":
+            info = d.get("info_dict") or {}
+            playlist_count = info.get("n_entries") or info.get("playlist_count") or state["total"]
+            playlist_index = info.get("playlist_index") or 1
+            state["total"] = playlist_count
+            state["done"] = playlist_index
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {"type": "progress", "done": state["done"], "total": state["total"]},
+            )
+        elif status == "error":
+            err = _strip_ansi(str(d.get("error", "item failed")))
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": "warn", "msg": err})
+
+    pp_args: list[str] = []
     if artist:
-        safe = artist.replace('"', '\\"')
-        ffmpeg_args += [f'-metadata artist="{safe}"', f'-metadata album_artist="{safe}"']
+        pp_args += ["-metadata", f"artist={artist}", "-metadata", f"album_artist={artist}"]
     if album:
-        safe = album.replace('"', '\\"')
-        ffmpeg_args.append(f'-metadata album="{safe}"')
+        pp_args += ["-metadata", f"album={album}"]
     if not req.playlist and title:
-        safe = title.replace('"', '\\"')
-        ffmpeg_args.append(f'-metadata title="{safe}"')
+        pp_args += ["-metadata", f"title={title}"]
 
-    if ffmpeg_args:
-        metadata.extend(["--postprocessor-args", f"Metadata:{' '.join(ffmpeg_args)}"])
+    ydl_opts: dict[str, Any] = {
+        "format": "bestaudio/best",
+        "noplaylist": not req.playlist,
+        "outtmpl": output_template,
+        "paths": {"home": str(savedir)},
+        "postprocessors": [
+            {"key": "FFmpegExtractAudio", "preferredcodec": "m4a", "preferredquality": "0"},
+        ],
+        "writethumbnail": True,
+        "embedthumbnail": True,
+        "addmetadata": True,
+        "parse_metadata": [
+            "autonumber:%(track_number)s" if req.playlist else "1:%(track_number)s"
+        ],
+        "ignoreerrors": True,
+        "logger": _Logger(on_item_error),
+        "progress_hooks": [progress_hook],
+        "quiet": True,
+        "no_warnings": True,
+    }
 
-    if req.playlist:
-        metadata.extend(["--parse-metadata", "autonumber:%(track_number)s"])
-    else:
-        metadata.extend(["--parse-metadata", "1:%(track_number)s"])
-
-    cmd = ["yt-dlp", "--yes-playlist" if req.playlist else "--no-playlist"]
+    if pp_args:
+        ydl_opts["postprocessor_args"] = {"Metadata": pp_args}
 
     if req.playlist and req.selected_items:
-        cmd.extend(["--playlist-items", ",".join(str(i) for i in req.selected_items)])
+        ydl_opts["playlist_items"] = ",".join(str(i) for i in req.selected_items)
 
-    cmd += ["-x", "--audio-format", "m4a", "-P", str(savedir), "-o", output_template, *metadata, req.url]
+    error_holder: list[str] = []
 
-    total = len(req.selected_items) if req.playlist and req.selected_items else 1
-    done = 0
-    log_lines: list[str] = []
-    dst: Path | None = None
-    # matches "[download] Downloading item 3 of 13"
-    _item_re = re.compile(r"\[download\] Downloading item (\d+) of (\d+)")
+    def run():
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.download([req.url])
+        except yt_dlp.utils.DownloadError as exc:
+            error_holder.append(_strip_ansi(str(exc)))
+        except Exception as exc:
+            error_holder.append(str(exc))
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, {"type": "_done"})
 
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-    )
+    task = asyncio.create_task(asyncio.to_thread(run))
 
-    assert process.stdout is not None
-    async for raw in process.stdout:
-        line = raw.decode(errors="replace").rstrip()
-        log_lines.append(line)
-        log.debug("yt-dlp: %s", line)
-        if req.playlist:
-            # "Downloading item N of M" fires at the start of each item;
-            # when we see item N > 1 starting, item N-1 just finished.
-            m = _item_re.search(line)
-            if m:
-                n = int(m.group(1))
-                if n > 1 and n - 1 > done:
-                    done = n - 1
-                    yield _sse("progress", json.dumps({"done": done, "total": total}))
-        else:
-            if line.startswith("[ExtractAudio] Destination:"):
-                dst = Path(line.split(":", 1)[1].strip())
-                done += 1
-                yield _sse("progress", json.dumps({"done": done, "total": total}))
-            elif line.startswith("[ExtractAudio] Not converting audio"):
-                dst = Path(line.split(";")[0].split()[-1].strip())
-                done += 1
-                yield _sse("progress", json.dumps({"done": done, "total": total}))
+    while True:
+        event = await queue.get()
+        if event["type"] == "_done":
+            break
+        elif event["type"] == "progress":
+            yield _sse("progress", json.dumps({"done": event["done"], "total": event["total"]}))
+        elif event["type"] == "warn":
+            log.warning("download warn: %s", event["msg"])
+            yield _sse("warn", event["msg"])
 
-    await process.wait()
+    await task
 
-    if process.returncode != 0:
-        log.error("download failed (rc=%d):\n%s", process.returncode, "\n".join(log_lines))
-        yield _sse("error", "\n".join(log_lines))
+    if error_holder:
+        log.error("download failed: %s", error_holder[0])
+        yield _sse("error", error_holder[0])
         return
 
-    # Ensure bar always reaches 100% regardless of which yt-dlp lines were seen
-    if req.playlist and done < total:
-        yield _sse("progress", json.dumps({"done": total, "total": total}))
+    # Ensure bar always reaches 100%
+    if state["done"] < state["total"]:
+        yield _sse("progress", json.dumps({"done": state["total"], "total": state["total"]}))
 
     if req.playlist:
         m3u_path = savedir / f"{dirname}.m3u"
         m3u_path.write_text("\n".join(str(f) for f in sorted(savedir.glob("*.m4a"))) + "\n")
 
-    if not req.playlist and req.delay and dst and dst.exists():
-        tmp = Path("/tmp/temp_audio.m4a")
-        proc2 = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-i", str(dst), "-ss", str(req.delay), "-c", "copy", str(tmp),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        assert proc2.stdout is not None
-        trim_log: list[str] = []
-        async for raw in proc2.stdout:
-            trim_log.append(raw.decode(errors="replace").rstrip())
-        await proc2.wait()
-        if proc2.returncode == 0:
-            tmp.replace(dst)
-        else:
-            yield _sse("error", "\n".join(trim_log))
-            return
+    # Probe newly downloaded files for corruption
+    new_files = sorted(set(savedir.glob("*.m4a")) - before_files)
+    for f in new_files:
+        probe_err = await _probe_file(f)
+        if probe_err:
+            log.warning("probe failed for %s: %s", f.name, probe_err)
+            yield _sse("warn", f"{f.name}: {probe_err}")
 
-    log.info("download done: %s", dst)
+    if not req.playlist and req.delay:
+        m4a_files = sorted(savedir.glob("*.m4a"))
+        dst = m4a_files[0] if m4a_files else None
+        if dst and dst.exists():
+            tmp = Path("/tmp/temp_audio.m4a")
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-y", "-i", str(dst), "-ss", str(req.delay), "-c", "copy", str(tmp),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            if await proc.wait() == 0:
+                tmp.replace(dst)
+            else:
+                yield _sse("error", "delay trim failed")
+                return
+
+    log.info("download done: savedir=%s", savedir)
     yield _sse("done", "")
 
 

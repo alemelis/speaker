@@ -92,6 +92,7 @@ const barWrap         = document.getElementById('bar-wrap');
 const barFill         = document.getElementById('bar-fill');
 const barLabel        = document.getElementById('bar-label');
 
+const warnLog   = document.getElementById('warn-log');
 const errorLog  = document.getElementById('error-log');
 const statusMsg = document.getElementById('status-msg');
 
@@ -219,9 +220,12 @@ async function startDownload({ playlist, selected_items, total }) {
       if (event === 'progress') {
         const { done: d, total: t } = JSON.parse(data);
         updateBar(d, t);
+      } else if (event === 'warn') {
+        appendWarn(data);
       } else if (event === 'done') {
         hideProgress();
-        showStatus('ok', 'Done.');
+        const hasWarns = !warnLog.classList.contains('hidden');
+        showStatus('ok', hasWarns ? 'Done (with warnings).' : 'Done.');
         return;
       } else if (event === 'error') {
         hideProgress();
@@ -267,6 +271,13 @@ function showStatus(type, msg) {
   statusMsg.classList.remove('hidden');
 }
 
+function appendWarn(msg) {
+  warnLog.classList.remove('hidden');
+  const li = document.createElement('li');
+  li.textContent = msg;
+  warnLog.appendChild(li);
+}
+
 function showError(log) {
   errorLog.textContent = log;
   errorLog.classList.remove('hidden');
@@ -275,6 +286,8 @@ function showError(log) {
 
 function resetFeedback() {
   progressSection.classList.add('hidden');
+  warnLog.classList.add('hidden');
+  warnLog.innerHTML = '';
   errorLog.classList.add('hidden');
   statusMsg.classList.add('hidden');
   errorLog.textContent = '';

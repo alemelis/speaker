@@ -51,3 +51,12 @@ def update_one(path_value: str, music_root: Path) -> None:
                 break
         else:
             _index.append(updated)
+
+
+def remove_one(path_value: str) -> None:
+    rel = str(Path(path_value))
+    with _index_lock:
+        for idx, item in enumerate(_index):
+            if item["path"] == rel:
+                del _index[idx]
+                break

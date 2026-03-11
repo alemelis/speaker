@@ -58,6 +58,27 @@
   background: #f3f3f3;
 }
 
+#tracks-table tbody tr.broken {
+  background: #fff3f3;
+}
+
+#tracks-table tbody tr.broken:hover {
+  background: #ffe6e6;
+}
+
+.broken-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #9b111e;
+  border: 1px solid #9b111e;
+  border-radius: 2px;
+  padding: 0 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+  cursor: help;
+}
+
 #tracks-table td:first-child,
 #tracks-table th:first-child {
   width: 32px;
@@ -84,6 +105,11 @@
   grid-column: span 4;
   border-color: var(--border);
   background: var(--panel);
+}
+
+.batch-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .batch-loading {

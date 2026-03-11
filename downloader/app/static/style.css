@@ -255,3 +255,22 @@ label {
 
 .status.ok    { color: #1a7a1a; }
 .status.error { color: #9b111e; }
+
+.warn-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  border: 1px solid #c8a800;
+  background: #fffbe6;
+}
+
+.warn-list li {
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid #e8d880;
+  color: #5a4000;
+}
+
+.warn-list li:last-child {
+  border-bottom: 0;
+}

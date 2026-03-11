@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Owntone Metadata WebUI</title>
-  <link rel="stylesheet" href="fomo.css?v=20260308a">
-  <link rel="stylesheet" href="style.css?v=20260308a">
+  <link rel="stylesheet" href="fomo.css?v=20260311a">
+  <link rel="stylesheet" href="style.css?v=20260311a">
 </head>
 <body>
   <header class="topbar">
@@ -35,6 +35,10 @@
           <input name="date" placeholder="Date">
           <button id="apply-selected-btn" type="submit">Apply to Selected</button>
         </form>
+        <div class="batch-actions">
+          <button id="probe-selected-btn" type="button">Probe selected</button>
+          <button id="delete-selected-btn" type="button">Delete selected</button>
+        </div>
         <div id="batch-loading" class="batch-loading hidden" aria-live="polite">
           <span>Applying updates...</span>
           <div class="progress-track">
@@ -73,6 +77,7 @@
         <input name="date" placeholder="Date">
         <div class="editor-actions">
           <button type="submit">Save</button>
+          <button id="delete-track-btn" type="button">Delete</button>
           <button id="close-editor-btn" type="button">Close</button>
         </div>
       </form>
@@ -81,6 +86,6 @@
 
   <div id="message" class="message"></div>
 
-  <script src="app.js?v=20260308a"></script>
+  <script src="app.js?v=20260311a"></script>
 </body>
 </html>
