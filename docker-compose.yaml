@@ -1,4 +1,23 @@
 services:
+    owntone:
+        image: owntone/owntone:latest
+        container_name: owntone
+        network_mode: host
+        restart: unless-stopped
+        environment:
+            TZ: Europe/London
+        volumes:
+            - ${OWNTONE_CONFIG_DIR}:/etc/owntone
+            - ${OWNTONE_CACHE_DIR}:/var/cache/owntone
+            - ${ST_SAVE_DIR}:/srv/music:ro
+            - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
+        entrypoint: ["/usr/sbin/owntone"]
+        command: ["-f", "-c", "/etc/owntone/owntone.conf"]
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "5"
     rfid-daemon:
         build:
             context: .
