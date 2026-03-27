@@ -87,6 +87,7 @@ const selNoneBtn    = document.getElementById('sel-none-btn');
 const dlSelectedBtn = document.getElementById('dl-selected-btn');
 
 const progressSection = document.getElementById('progress-section');
+const statusLine      = document.getElementById('status-line');
 const spinner         = document.getElementById('spinner');
 const barWrap         = document.getElementById('bar-wrap');
 const barFill         = document.getElementById('bar-fill');
@@ -220,6 +221,8 @@ async function startDownload({ playlist, selected_items, total }) {
       if (event === 'progress') {
         const { done: d, total: t } = JSON.parse(data);
         updateBar(d, t);
+      } else if (event === 'status') {
+        statusLine.textContent = data;
       } else if (event === 'warn') {
         appendWarn(data);
       } else if (event === 'done') {
@@ -255,6 +258,7 @@ function showProgress(playlist, total) {
 
 function hideProgress() {
   progressSection.classList.add('hidden');
+  statusLine.textContent = '';
 }
 
 function updateBar(done, total) {

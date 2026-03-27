@@ -36,6 +36,10 @@ class ProbeRequest(BaseModel):
     paths: list[str] = Field(default_factory=list)
 
 
+class FixFromFilenameRequest(BaseModel):
+    paths: list[str] = Field(default_factory=list)
+
+
 class FrontendLogRequest(BaseModel):
     level: str = "error"
     message: str
@@ -106,9 +110,34 @@ def patch_batch_endpoint(payload: BatchPatchRequest) -> dict[str, Any]:
     return {"ok": True, "updated": updated}
 
 
+@api_router.post("/rebuild")
+def rebuild_endpoint() -> dict[str, Any]:
+    count = rebuild(MUSIC_ROOT)
+    return {"ok": True, "count": count}
+
+
 @api_router.post("/rescan")
 def rescan_endpoint() -> dict[str, Any]:
     return trigger_rescan()
+
+
+@api_router.post("/fix-from-filename")
+def fix_from_filename_endpoint(payload: FixFromFilenameRequest) -> dict[str, Any]:
+    updated = 0
+    for path in payload.paths:
+        abs_path = validate_path(path, MUSIC_ROOT)
+        stem = abs_path.stem
+        parts = stem.split("-", 1)
+        tags: dict[str, Any] = {}
+        if len(parts) == 2 and parts[0].isdigit():
+            tags["tracknumber"] = str(int(parts[0]))
+            tags["title"] = parts[1].strip()
+        else:
+            tags["title"] = stem
+        write_tags(abs_path, tags)
+        update_one(path, MUSIC_ROOT)
+        updated += 1
+    return {"ok": True, "updated": updated}
 
 
 @api_router.post("/probe")

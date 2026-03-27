@@ -42,13 +42,22 @@ async def _probe_file(path: Path) -> str | None:
 
 
 class _Logger:
-    """yt-dlp logger that routes item-level errors to a callback."""
+    """yt-dlp logger that routes messages to callbacks."""
 
-    def __init__(self, on_error):
+    def __init__(self, on_error, on_status):
         self._on_error = on_error
+        self._on_status = on_status
 
-    def debug(self, msg: str) -> None: pass
-    def info(self, msg: str) -> None: pass
+    def debug(self, msg: str) -> None:
+        msg = _strip_ansi(msg).strip()
+        if msg:
+            self._on_status(msg)
+
+    def info(self, msg: str) -> None:
+        msg = _strip_ansi(msg).strip()
+        if msg:
+            self._on_status(msg)
+
     def warning(self, msg: str) -> None: pass
 
     def error(self, msg: str) -> None:
@@ -150,7 +159,7 @@ async def playlist_info(req: PlaylistInfoRequest):
     log.info("playlist-info url=%r", req.url)
 
     def _fetch():
-        opts = {"flat_playlist": True, "quiet": True, "no_warnings": True}
+        opts = {"flat_playlist": True, "quiet": True, "no_warnings": True, "extractor_args": {"youtube": {"player_client": ["tv_embedded"]}}}
         with YoutubeDL(opts) as ydl:
             return ydl.extract_info(req.url, download=False)
 
@@ -212,14 +221,13 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
     def on_item_error(msg: str) -> None:
         loop.call_soon_threadsafe(queue.put_nowait, {"type": "warn", "msg": msg})
 
+    def on_status(msg: str) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, {"type": "status", "msg": msg})
+
     def progress_hook(d):
         status = d.get("status")
         if status == "finished":
-            info = d.get("info_dict") or {}
-            playlist_count = info.get("n_entries") or info.get("playlist_count") or state["total"]
-            playlist_index = info.get("playlist_index") or 1
-            state["total"] = playlist_count
-            state["done"] = playlist_index
+            state["done"] += 1
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 {"type": "progress", "done": state["done"], "total": state["total"]},
@@ -228,37 +236,21 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
             err = _strip_ansi(str(d.get("error", "item failed")))
             loop.call_soon_threadsafe(queue.put_nowait, {"type": "warn", "msg": err})
 
-    pp_args: list[str] = []
-    if artist:
-        pp_args += ["-metadata", f"artist={artist}", "-metadata", f"album_artist={artist}"]
-    if album:
-        pp_args += ["-metadata", f"album={album}"]
-    if not req.playlist and title:
-        pp_args += ["-metadata", f"title={title}"]
-
     ydl_opts: dict[str, Any] = {
         "format": "bestaudio/best",
+        "extractor_args": {"youtube": {"player_client": ["tv_embedded"]}},
         "noplaylist": not req.playlist,
         "outtmpl": output_template,
         "paths": {"home": str(savedir)},
         "postprocessors": [
             {"key": "FFmpegExtractAudio", "preferredcodec": "m4a", "preferredquality": "0"},
         ],
-        "writethumbnail": True,
-        "embedthumbnail": True,
-        "addmetadata": True,
-        "parse_metadata": [
-            "autonumber:%(track_number)s" if req.playlist else "1:%(track_number)s"
-        ],
         "ignoreerrors": True,
-        "logger": _Logger(on_item_error),
+        "logger": _Logger(on_item_error, on_status),
         "progress_hooks": [progress_hook],
         "quiet": True,
         "no_warnings": True,
     }
-
-    if pp_args:
-        ydl_opts["postprocessor_args"] = {"Metadata": pp_args}
 
     if req.playlist and req.selected_items:
         ydl_opts["playlist_items"] = ",".join(str(i) for i in req.selected_items)
@@ -276,6 +268,7 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, {"type": "_done"})
 
+    yield _sse("status", "Downloading...")
     task = asyncio.create_task(asyncio.to_thread(run))
 
     while True:
@@ -284,6 +277,8 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
             break
         elif event["type"] == "progress":
             yield _sse("progress", json.dumps({"done": event["done"], "total": event["total"]}))
+        elif event["type"] == "status":
+            yield _sse("status", event["msg"])
         elif event["type"] == "warn":
             log.warning("download warn: %s", event["msg"])
             yield _sse("warn", event["msg"])
@@ -303,7 +298,7 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
         m3u_path = savedir / f"{dirname}.m3u"
         m3u_path.write_text("\n".join(str(f) for f in sorted(savedir.glob("*.m4a"))) + "\n")
 
-    # Probe newly downloaded files for corruption
+    # Probe and tag newly downloaded files
     new_files = sorted(set(savedir.glob("*.m4a")) - before_files)
     for f in new_files:
         probe_err = await _probe_file(f)
@@ -311,11 +306,44 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
             log.warning("probe failed for %s: %s", f.name, probe_err)
             yield _sse("warn", f"{f.name}: {probe_err}")
 
+        # Build metadata from filename + user input
+        file_meta: list[str] = []
+        if req.playlist:
+            parts = f.stem.split("-", 1)
+            track_title = parts[1].strip() if len(parts) == 2 else f.stem
+            track_num = parts[0].strip()
+            if track_title:
+                file_meta += ["-metadata", f"title={track_title}"]
+            if track_num.isdigit():
+                file_meta += ["-metadata", f"track={int(track_num)}"]
+        else:
+            file_meta += ["-metadata", f"title={title or f.stem}"]
+        if artist:
+            file_meta += ["-metadata", f"artist={artist}", "-metadata", f"album_artist={artist}"]
+        if album:
+            file_meta += ["-metadata", f"album={album}"]
+
+        yield _sse("status", f"Tagging {f.name}...")
+        tmp = f.with_suffix(".tmp.m4a")
+        cmd = ["ffmpeg", "-y", "-i", str(f)] + file_meta + ["-c", "copy", str(tmp)]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        if await proc.wait() == 0:
+            tmp.replace(f)
+        else:
+            tmp.unlink(missing_ok=True)
+            log.warning("metadata write failed for %s", f.name)
+            yield _sse("warn", f"{f.name}: metadata write failed")
+
     if not req.playlist and req.delay:
+        yield _sse("status", "Trimming silence...")
         m4a_files = sorted(savedir.glob("*.m4a"))
         dst = m4a_files[0] if m4a_files else None
         if dst and dst.exists():
-            tmp = Path("/tmp/temp_audio.m4a")
+            tmp = dst.with_suffix(".tmp.m4a")
             proc = await asyncio.create_subprocess_exec(
                 "ffmpeg", "-y", "-i", str(dst), "-ss", str(req.delay), "-c", "copy", str(tmp),
                 stdout=asyncio.subprocess.DEVNULL,
@@ -324,6 +352,7 @@ async def _run_download(req: DownloadRequest) -> AsyncGenerator[str, None]:
             if await proc.wait() == 0:
                 tmp.replace(dst)
             else:
+                tmp.unlink(missing_ok=True)
                 yield _sse("error", "delay trim failed")
                 return
 

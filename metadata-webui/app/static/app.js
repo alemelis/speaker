@@ -20,12 +20,14 @@ const editableFields = [
 const tracksBody = document.getElementById("tracks-body");
 const searchInput = document.getElementById("search-input");
 const selectVisibleBtn = document.getElementById("select-visible-btn");
+const rebuildBtn = document.getElementById("rebuild-btn");
 const rescanBtn = document.getElementById("rescan-btn");
 const batchBar = document.getElementById("batch-bar");
 const batchCount = document.getElementById("batch-count");
 const batchForm = document.getElementById("batch-form");
 const batchLoading = document.getElementById("batch-loading");
 const applySelectedBtn = document.getElementById("apply-selected-btn");
+const fixFilenameBtn = document.getElementById("fix-filename-btn");
 const probeSelectedBtn = document.getElementById("probe-selected-btn");
 const deleteSelectedBtn = document.getElementById("delete-selected-btn");
 const editorPanel = document.getElementById("editor-panel");
@@ -241,6 +243,25 @@ async function applyBatch(event) {
   }
 }
 
+async function fixFromFilename() {
+  const paths = Array.from(state.selectedPaths);
+  if (!paths.length) return;
+
+  fixFilenameBtn.disabled = true;
+  fixFilenameBtn.textContent = "Fixing...";
+  try {
+    const result = await api("api/fix-from-filename", {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    });
+    showMessage(`Fixed ${result.updated} track(s).`);
+    await loadIndex();
+  } finally {
+    fixFilenameBtn.disabled = false;
+    fixFilenameBtn.textContent = "Fix titles from filename";
+  }
+}
+
 async function probeSelected() {
   const paths = Array.from(state.selectedPaths);
   if (!paths.length) return;
@@ -299,6 +320,23 @@ async function deleteSelected() {
   if (deleted > 0) showMessage(`${deleted} track(s) deleted.`);
   await loadIndex();
   updateBatchBar();
+}
+
+async function rebuildIndex() {
+  rebuildBtn.disabled = true;
+  rebuildBtn.textContent = "Scanning...";
+  try {
+    const result = await api("api/rebuild", { method: "POST" });
+    if (result.ok) {
+      showMessage(`Library rescanned: ${result.count} tracks.`);
+      await loadIndex();
+      return;
+    }
+    showMessage("Library rescan failed.", true);
+  } finally {
+    rebuildBtn.disabled = false;
+    rebuildBtn.textContent = "Rescan Library";
+  }
 }
 
 async function triggerRescan() {
@@ -366,6 +404,18 @@ batchForm.addEventListener("submit", async (event) => {
     showMessage(err.message, true);
   }
 });
+rebuildBtn.addEventListener("click", async () => {
+  try {
+    await rebuildIndex();
+  } catch (err) {
+    sendFrontendLog({
+      level: "error",
+      source: "rebuild",
+      message: errorToString(err),
+    });
+    showMessage(err.message, true);
+  }
+});
 rescanBtn.addEventListener("click", async () => {
   try {
     await triggerRescan();
@@ -375,6 +425,14 @@ rescanBtn.addEventListener("click", async () => {
       source: "rescan",
       message: errorToString(err),
     });
+    showMessage(err.message, true);
+  }
+});
+fixFilenameBtn.addEventListener("click", async () => {
+  try {
+    await fixFromFilename();
+  } catch (err) {
+    sendFrontendLog({ level: "error", source: "fixFromFilename", message: errorToString(err) });
     showMessage(err.message, true);
   }
 });
@@ -408,14 +466,12 @@ closeEditorBtn.addEventListener("click", () => {
   state.activePath = null;
 });
 
-loadIndex().catch((err) => {
-  sendFrontendLog({
-    level: "error",
-    source: "loadIndex",
-    message: errorToString(err),
+loadIndex()
+  .then(() => api("api/rebuild", { method: "POST" }))
+  .then(result => { if (result.ok) return loadIndex(); })
+  .catch(err => {
+    sendFrontendLog({ level: "error", source: "startup-rebuild", message: errorToString(err) });
   });
-  showMessage(`Failed to load index: ${err.message}`, true);
-});
 
 window.addEventListener("error", (event) => {
   sendFrontendLog({
