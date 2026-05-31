@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 yt-dlp
 yt-search-python
+mutagen
+requests

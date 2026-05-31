@@ -21,8 +21,8 @@ RUN pip install -r requirements.txt
 # If you don't keep a requirements.txt, uncomment the next line instead:
 # RUN pip install evdev pyyaml requests
 
-# Copy shared modules and daemon
-COPY shared/db.py /app/db.py
+# Copy shared core package and daemon
+COPY core /app/core
 COPY daemon.py /app/app.py
 
 # Run as root to ensure read access to /dev/input (simplest).

@@ -1,100 +1,109 @@
 #!/usr/bin/env python3
+"""FOMO NFC daemon: read a tag, look it up, tell OwnTone to play it.
+
+Hardened over the original: all OwnTone calls go through the shared client (with
+timeouts, so the daemon can no longer hang on a slow/down server), the NFC reader
+is matched by a configurable name and reconnects with backoff instead of exiting,
+and the debounce guard is lock-protected against rapid double-taps.
+"""
+
 import logging
-import os
-import sys
+import threading
 import time
 
-import db
-import requests
 from evdev import InputDevice, ecodes, list_devices
 
-# ---------------- CONFIG ----------------
-FOMO_DB = os.getenv("FOMO_DB", "./fomo.db")
-OWNTONE_API = os.getenv("OWNTONE_API")
-# ----------------------------------------
+from core import config, db
+from core.owntone import OwnToneClient
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s'
+    format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-
-# Keycode → digit mapping for HID keyboard emulation
+# Keycode -> digit mapping for HID keyboard emulation.
 KEYMAP = {
     2: "1", 3: "2", 4: "3", 5: "4", 6: "5",
     7: "6", 8: "7", 9: "8", 10: "9", 11: "0",
-    28: "ENTER"
+    28: "ENTER",
 }
 
+DEBOUNCE_SECONDS = 30.0
+RECONNECT_BACKOFF_SECONDS = 3.0
 
-class Player():
-    def __init__(self):
-        self.conn = db.connect(FOMO_DB)
-        logging.info(f"Connected to DB: {FOMO_DB}")
-        self.tag = None
+
+class Player:
+    def __init__(self) -> None:
+        self.conn = db.connect(config.FOMO_DB)
+        logging.info("Connected to DB: %s", config.FOMO_DB)
+        self.client = OwnToneClient()
+        self.tag: str | None = None
         self.time = time.time()
+        self._lock = threading.Lock()
 
-    @classmethod
-    def stop_playback(cls):
+    def stop_playback(self) -> None:
         logging.info("Stopping playback")
         try:
-            requests.put(f"{OWNTONE_API}/player/stop")
-            requests.put(f"{OWNTONE_API}/queue/clear")
-        except Exception as e:
-            logging.error(f"Failed to stop playback: {e}")
+            self.client.stop()
+            self.client.clear_queue()
+        except Exception as exc:
+            logging.error("Failed to stop playback: %s", exc)
 
-    def enqueue(self, kind, query):
+    def _enqueue(self, kind: str, query: str) -> str | None:
         field = "title" if kind == "track" else "album"
         expression = f'{field} is "{query}"'
-        logging.info(f"Enqueueing: {expression}")
+        logging.info("Enqueueing: %s", expression)
         try:
-            r = requests.post(
-                f"{OWNTONE_API}/queue/items/add",
-                params={"expression": expression},
-            )
-            r.raise_for_status()
-            items = r.json().get("items", [])
-            if items:
-                return items[0]["id"]
-            logging.warning(f"No items matched expression: {expression}")
-        except Exception as e:
-            logging.error(f"Failed to enqueue: {e}")
-        return None
+            item_id = self.client.enqueue_expression(expression)
+            if item_id is None:
+                logging.warning("No items matched expression: %s", expression)
+            return item_id
+        except Exception as exc:
+            logging.error("Failed to enqueue: %s", exc)
+            return None
 
-    def play_from(self, item_id):
+    def read_tag(self, tag_id: str) -> None:
+        with self._lock:
+            now = time.time()
+            if tag_id == self.tag and (now - self.time) <= DEBOUNCE_SECONDS:
+                return
+            self.time = now
+
+        row = db.get_tag(self.conn, tag_id)
+        if row is None:
+            logging.warning("Unknown tag: %s", tag_id)
+            return
+
+        kind, query = row["kind"], row["query"]
+        item_id = self._enqueue(kind, query)
+        if not item_id:
+            logging.warning("No result for tag: %s", tag_id)
+            return
+
         try:
-            requests.put(f"{OWNTONE_API}/player/play", params={"item_id": item_id})
-        except Exception as e:
-            logging.error(f"Failed to play: {e}")
+            self.client.play(item_id)
+        except Exception as exc:
+            logging.error("Failed to play: %s", exc)
+            return
 
-    def read_tag(self, tag_id):
-        now = time.time()
-        if tag_id != self.tag or (now - self.time > 30.0):
-            self.time = time.time()
-            row = db.get_tag(self.conn, tag_id)
-            if row is None:
-                logging.warning(f"Unknown tag: {tag_id}")
-                return
-            kind, query = row["kind"], row["query"]
-            item_id = self.enqueue(kind, query)
-            if item_id:
-                self.play_from(item_id)
-                self.tag = tag_id
-                db.log_play(self.conn, tag_id, kind, query)
-            else:
-                logging.warning(f"No result for tag: {tag_id}")
+        self.tag = tag_id
+        db.log_play(self.conn, tag_id, kind, query)
 
 
-class Reader():
-    def __init__(self):
-        devices = [InputDevice(path) for path in list_devices()]
-        for dev in devices:
-            if 'Van Ooijen' in dev.name or 'RFID' in dev.name:
-                logging.info(f"Using device: {dev.path} ({dev.name})")
-                self.dev = dev
-                return
-        logging.error("RFID reader not found")
-        sys.exit(1)
+class Reader:
+    def __init__(self) -> None:
+        self.dev = self._find_device()
+
+    @staticmethod
+    def _find_device() -> InputDevice:
+        for path in list_devices():
+            dev = InputDevice(path)
+            if any(m in dev.name for m in config.NFC_DEVICE_MATCH):
+                logging.info("Using device: %s (%s)", dev.path, dev.name)
+                return dev
+        raise FileNotFoundError(
+            f"No NFC reader matching {config.NFC_DEVICE_MATCH} found"
+        )
 
     def tag_gen(self):
         buffer = ""
@@ -103,30 +112,36 @@ class Reader():
                 key = event.code
                 if key in KEYMAP:
                     if KEYMAP[key] == "ENTER":
-                        tag_id = buffer
-                        buffer = ""
-                        yield tag_id
+                        tag_id, buffer = buffer, ""
+                        if tag_id:
+                            yield tag_id
                     else:
                         buffer += KEYMAP[key]
 
-def main():
-    reader = Reader()
-    tag_gen = reader.tag_gen()
 
+def main() -> None:
     player = Player()
-
-    while True:
-        try:
-            tag_id = next(tag_gen)
-            logging.info(f"Tag detected: {tag_id}")
-            player.read_tag(tag_id)
-        except StopIteration:
-            pass
-        time.sleep(0.05)
-
-if __name__ == "__main__":
     try:
-        main()
+        while True:
+            try:
+                reader = Reader()
+            except FileNotFoundError as exc:
+                logging.error("%s; retrying in %ss", exc, RECONNECT_BACKOFF_SECONDS)
+                time.sleep(RECONNECT_BACKOFF_SECONDS)
+                continue
+
+            try:
+                for tag_id in reader.tag_gen():
+                    logging.info("Tag detected: %s", tag_id)
+                    player.read_tag(tag_id)
+                logging.warning("Reader stream ended; reconnecting")
+            except OSError as exc:
+                logging.error("Reader disconnected (%s); reconnecting", exc)
+            time.sleep(RECONNECT_BACKOFF_SECONDS)
     except KeyboardInterrupt:
         logging.info("Exiting...")
-        Player.stop_playback()
+        player.stop_playback()
+
+
+if __name__ == "__main__":
+    main()

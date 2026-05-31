@@ -1,28 +1,20 @@
 import os
 import re
 import socket
-import sys
 import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote_plus
 
-import requests
-
-sys.path.insert(0, "/app")
-import db
+from core import config, db
+from core.owntone import OwnToneClient
+from core.web_utils import SPAStaticFiles
 
 from fastapi import APIRouter, FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 
-class SPAStaticFiles(StaticFiles):
-    async def get_response(self, path: str, scope: dict[str, Any]):  # type: ignore[override]
-        response = await super().get_response(path, scope)
-        if response.status_code == 404:
-            return await super().get_response("index.html", scope)
-        return response
+client = OwnToneClient()
 
 
 class TagMapping(BaseModel):
@@ -37,6 +29,7 @@ class SearchResult(BaseModel):
     query_text: str
     kind: str
     uri: str | None = None
+    artwork: str | None = None
 
 
 class UpsertTagRequest(BaseModel):
@@ -45,11 +38,10 @@ class UpsertTagRequest(BaseModel):
     query_text: str
 
 
-FOMO_DB = os.getenv("FOMO_DB", "/data/fomo.db")
-OWNTONE_API = os.getenv("OWNTONE_API", "").rstrip("/")
+FOMO_DB = config.FOMO_DB
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DOCKER_SOCKET = "/var/run/docker.sock"
-RFID_CONTAINER = os.getenv("RFID_CONTAINER", "rfid-daemon")
+RFID_CONTAINER = config.RFID_CONTAINER
 _UNKNOWN_TAG_RE = re.compile(r"Unknown tag:\s*(\d+)")
 
 TRACK_PREFIX = "tracks&query="
@@ -91,9 +83,29 @@ def list_tags() -> list[TagMapping]:
     ]
 
 
+@api_router.get("/tags/check")
+def check_tags() -> dict[str, Any]:
+    if not config.OWNTONE_API:
+        raise HTTPException(status_code=500, detail="OWNTONE_API is not configured.")
+
+    rows = db.all_tags(get_conn())
+    results: dict[str, Any] = {}
+
+    for row in rows:
+        owntone_type = "tracks" if row["kind"] == "track" else "albums"
+        try:
+            payload = client.search(owntone_type, row["query"], 1)
+            count = payload.get(owntone_type, {}).get("total", 0)
+            results[row["tag_id"]] = {"ok": count > 0, "count": count}
+        except Exception as exc:
+            results[row["tag_id"]] = {"ok": False, "count": 0, "error": str(exc)}
+
+    return results
+
+
 @api_router.get("/search")
 def search_owntone(kind: str, q: str, limit: int = 20) -> list[SearchResult]:
-    if not OWNTONE_API:
+    if not config.OWNTONE_API:
         raise HTTPException(status_code=500, detail="OWNTONE_API is not configured.")
 
     normalized_kind = kind.strip().lower()
@@ -104,17 +116,10 @@ def search_owntone(kind: str, q: str, limit: int = 20) -> list[SearchResult]:
         return []
 
     owntone_type = "tracks" if normalized_kind == "track" else "albums"
-    endpoint = f"{OWNTONE_API}/search"
 
     try:
-        resp = requests.get(
-            endpoint,
-            params={"type": owntone_type, "query": q.strip(), "limit": max(1, min(limit, 50))},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-    except requests.RequestException as exc:
+        payload = client.search(owntone_type, q.strip(), max(1, min(limit, 50)))
+    except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Owntone search failed: {exc}") from exc
 
     items = payload.get(owntone_type, {}).get("items", [])
@@ -137,6 +142,7 @@ def search_owntone(kind: str, q: str, limit: int = 20) -> list[SearchResult]:
                 query_text=query_text.strip(),
                 kind=normalized_kind,
                 uri=item.get("uri"),
+                artwork=item.get("artwork_url"),
             )
         )
     return results

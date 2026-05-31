@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY downloader/requirements.txt /app/requirements.txt
+COPY fomo-ui/requirements.txt /app/requirements.txt
 RUN pip install -r /app/requirements.txt
 
-COPY downloader/app /app/app
-COPY shared/fomo.css /app/app/static/fomo.css
+COPY core /app/core
+COPY fomo-ui/app /app/app
 
 EXPOSE 3050
 

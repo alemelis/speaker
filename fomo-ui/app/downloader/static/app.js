@@ -9,6 +9,15 @@ const searchResults = document.getElementById('search-results');
 searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 searchBtn.addEventListener('click', doSearch);
 
+// Search-as-you-type, debounced so a burst of keystrokes fires one request.
+let searchTimer = null;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = searchInput.value.trim();
+  if (q.length < 2) return;
+  searchTimer = setTimeout(doSearch, 300);
+});
+
 async function doSearch() {
   const query = searchInput.value.trim();
   if (!query) return;
@@ -198,49 +207,63 @@ async function startDownload({ playlist, selected_items, total }) {
     return;
   }
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-
-    // SSE events are separated by double newlines
-    const parts = buf.split('\n\n');
-    buf = parts.pop();
-
-    for (const part of parts) {
-      const eventLine = part.match(/^event: (\w+)/m);
-      const dataLine  = part.match(/^data: (.*)/m);
-      if (!eventLine) continue;
-      const event = eventLine[1];
-      const data  = dataLine ? dataLine[1] : '';
-
-      if (event === 'progress') {
-        const { done: d, total: t } = JSON.parse(data);
-        updateBar(d, t);
-      } else if (event === 'status') {
-        statusLine.textContent = data;
-      } else if (event === 'warn') {
-        appendWarn(data);
-      } else if (event === 'done') {
-        hideProgress();
-        const hasWarns = !warnLog.classList.contains('hidden');
-        showStatus('ok', hasWarns ? 'Done (with warnings).' : 'Done.');
-        return;
-      } else if (event === 'error') {
-        hideProgress();
-        showError(data);
-        return;
-      }
-      // 'log' events are intentionally ignored — shown only on error
-    }
-  }
-
-  hideProgress();
+  const { job_id } = await res.json();
+  // The job now runs server-side, independent of this page — closing the tab
+  // does not stop it. We just watch its progress stream.
+  watchJob(job_id, playlist, total);
 }
+
+// Subscribe to a job's SSE stream. Safe to call on page load to re-attach to a
+// download already in flight. EventSource auto-reconnects, and the server
+// replays a snapshot on connect, so progress resumes after navigation.
+function watchJob(jobId, playlist, total) {
+  showProgress(playlist, total);
+  const es = new EventSource(`api/download/${jobId}/events`);
+
+  es.addEventListener('snapshot', e => {
+    const s = JSON.parse(e.data);
+    showProgress(!!s.playlist, s.total || total || 1);
+    updateBar(s.done || 0, s.total || 1);
+    if (s.message) statusLine.textContent = s.message;
+  });
+  es.addEventListener('progress', e => {
+    const { done, total } = JSON.parse(e.data);
+    updateBar(done, total);
+  });
+  es.addEventListener('status', e => { statusLine.textContent = e.data; });
+  es.addEventListener('warn', e => appendWarn(e.data));
+  es.addEventListener('done', () => {
+    es.close();
+    hideProgress();
+    const hasWarns = !warnLog.classList.contains('hidden');
+    showStatus('ok', hasWarns ? 'Done (with warnings).' : 'Done.');
+  });
+  es.addEventListener('failed', e => {
+    es.close();
+    hideProgress();
+    showError(e.data || 'Download failed.');
+  });
+  es.addEventListener('cancelled', () => {
+    es.close();
+    hideProgress();
+    showStatus('error', 'Cancelled.');
+  });
+  // Native connection errors (not SSE 'failed' events) carry no data — let
+  // EventSource reconnect on its own rather than reporting a failure.
+}
+
+// On load, re-attach to any download still running so it shows up even if the
+// original tab was closed.
+async function reattachRunningJobs() {
+  try {
+    const res = await fetch('api/downloads');
+    if (!res.ok) return;
+    const jobs = await res.json();
+    const active = jobs.find(j => j.status === 'running' || j.status === 'queued');
+    if (active) watchJob(active.job_id, !!active.playlist, active.total || 1);
+  } catch { /* ignore */ }
+}
+reattachRunningJobs();
 
 // --- Progress UI ---
 

@@ -5,6 +5,7 @@ const backBtn = document.getElementById("back-btn");
 const tagsSearchInput = document.getElementById("tags-search-input");
 const tagsBody = document.getElementById("tags-body");
 const message = document.getElementById("message");
+const checkBtn = document.getElementById("check-btn");
 
 const addForm = document.getElementById("add-form");
 const tagIdInput = document.getElementById("tag-id-input");
@@ -83,7 +84,10 @@ async function api(path, options = {}) {
 
 function setView(viewName) {
   const showAdd = viewName === "add";
-  if (!showAdd) stopTapping();
+  if (!showAdd) {
+    stopTapping();
+    tagIdInput.readOnly = false;
+  }
   addView.classList.toggle("hidden", !showAdd);
   listView.classList.toggle("hidden", showAdd);
 }
@@ -101,17 +105,31 @@ function buildPreview() {
 }
 
 let allTags = [];
+let checkResults = {};
 
 function renderTags(tags) {
   tagsBody.innerHTML = "";
   for (const item of tags) {
+    const check = checkResults[item.tag_id];
+    let statusBadge = "";
+    if (check !== undefined) {
+      if (check.ok) {
+        statusBadge = ` <span class="tag-status ok" title="${check.count} result(s)">✓</span>`;
+      } else {
+        const hint = check.error ? `error: ${check.error}` : "0 results in owntone";
+        statusBadge = ` <span class="tag-status fail" title="${hint}">✗</span>`;
+      }
+    }
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${item.tag_id}</td>
       <td>${item.kind}</td>
-      <td>${item.query_text}</td>
+      <td>${item.query_text}${statusBadge}</td>
       <td class="col-raw">${item.query_raw}</td>
-      <td><button type="button" data-delete="${item.tag_id}">Delete</button></td>
+      <td>
+        <button type="button" data-edit-id="${item.tag_id}" data-edit-kind="${item.kind}" data-edit-query="${item.query_text}">Edit</button>
+        <button type="button" data-delete="${item.tag_id}">Delete</button>
+      </td>
     `;
     tagsBody.appendChild(row);
   }
@@ -138,6 +156,25 @@ async function loadTags() {
   filterTags();
 }
 
+async function checkAllTags() {
+  checkBtn.disabled = true;
+  checkBtn.textContent = "Checking…";
+  try {
+    checkResults = await api("api/tags/check");
+    filterTags();
+    const total = Object.keys(checkResults).length;
+    const ok = Object.values(checkResults).filter((r) => r.ok).length;
+    showMessage(`Check complete: ${ok}/${total} tags OK.`, ok < total);
+  } catch (err) {
+    showMessage(err.message, true);
+  } finally {
+    checkBtn.disabled = false;
+    checkBtn.textContent = "Check tags";
+  }
+}
+
+checkBtn.addEventListener("click", checkAllTags);
+
 function renderResults(results) {
   resultsList.innerHTML = "";
   if (results.length === 0 && searchInput.value.trim()) {
@@ -149,6 +186,14 @@ function renderResults(results) {
   }
   for (const result of results) {
     const li = document.createElement("li");
+    if (result.artwork) {
+      const img = document.createElement("img");
+      img.src = `/artwork/?u=${encodeURIComponent(result.artwork)}`;
+      img.loading = "lazy";
+      img.width = 40;
+      img.height = 40;
+      li.appendChild(img);
+    }
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = result.label;
@@ -245,11 +290,23 @@ addForm.addEventListener("submit", async (event) => {
 });
 
 tagsBody.addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-delete]");
-  if (!button) {
+  const editBtn = event.target.closest("button[data-edit-id]");
+  if (editBtn) {
+    tagIdInput.value = editBtn.dataset.editId;
+    tagIdInput.readOnly = true;
+    kindSelect.value = editBtn.dataset.editKind;
+    queryTextInput.value = editBtn.dataset.editQuery;
+    buildPreview();
+    setView("add");
+    showMessage(`Editing tag ${editBtn.dataset.editId}.`);
     return;
   }
-  const tagId = button.dataset.delete;
+
+  const deleteBtn = event.target.closest("button[data-delete]");
+  if (!deleteBtn) {
+    return;
+  }
+  const tagId = deleteBtn.dataset.delete;
   try {
     await api(`api/tags/${encodeURIComponent(tagId)}`, { method: "DELETE" });
     showMessage(`Deleted tag ${tagId}.`);

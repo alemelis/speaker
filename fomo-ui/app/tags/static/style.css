@@ -157,3 +157,18 @@ label {
   margin-top: 0.25rem;
   min-height: 1em;
 }
+
+.tag-status {
+  display: inline-block;
+  font-weight: bold;
+  margin-left: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.tag-status.ok {
+  color: #1a7a1a;
+}
+
+.tag-status.fail {
+  color: #9b111e;
+}

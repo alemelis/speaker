@@ -1,1 +1,0 @@
-"""RFID tag organizer app."""

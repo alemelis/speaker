@@ -6,20 +6,16 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from core.owntone import OwnToneClient
+from core.web_utils import SPAStaticFiles
 
 from .indexer import get_index, rebuild, remove_one, update_one
 from .metadata import read_tags, validate_path, write_tags
-from .owntone import trigger_rescan
 
 
-class SPAStaticFiles(StaticFiles):
-    async def get_response(self, path: str, scope: dict[str, Any]):  # type: ignore[override]
-        response = await super().get_response(path, scope)
-        if response.status_code == 404:
-            return await super().get_response("index.html", scope)
-        return response
+client = OwnToneClient()
 
 
 class TrackPatchRequest(BaseModel):
@@ -118,7 +114,7 @@ def rebuild_endpoint() -> dict[str, Any]:
 
 @api_router.post("/rescan")
 def rescan_endpoint() -> dict[str, Any]:
-    return trigger_rescan()
+    return client.rescan()
 
 
 @api_router.post("/fix-from-filename")
