@@ -49,9 +49,20 @@ class Player:
         except Exception as exc:
             logging.error("Failed to stop playback: %s", exc)
 
+    @staticmethod
+    def _build_expression(field: str, query: str) -> str:
+        # OwnTone's smart-playlist parser cannot handle a double quote inside a
+        # quoted value (neither raw nor backslash-escaped -> 500). When the
+        # query contains quotes, match on the quote-free fragments instead: an
+        # AND of `includes` clauses still pins down the exact track/album.
+        if '"' not in query:
+            return f'{field} is "{query}"'
+        fragments = [f.strip() for f in query.split('"') if f.strip()]
+        return " and ".join(f'{field} includes "{f}"' for f in fragments)
+
     def _enqueue(self, kind: str, query: str) -> str | None:
         field = "title" if kind == "track" else "album"
-        expression = f'{field} is "{query}"'
+        expression = self._build_expression(field, query)
         logging.info("Enqueueing: %s", expression)
         try:
             item_id = self.client.enqueue_expression(expression)
