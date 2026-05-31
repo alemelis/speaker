@@ -57,6 +57,21 @@ services:
             options:
                 max-size: "10m"
                 max-file: "5"
+    authelia:
+        image: authelia/authelia:latest
+        container_name: authelia
+        restart: unless-stopped
+        ports:
+            - "9091:9091"
+        volumes:
+            - /home/pi4/authelia:/config
+        environment:
+            TZ: Europe/London
+        logging:
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "5"
     fomo-ui:
         build:
             context: .
