@@ -363,12 +363,16 @@ async def _run_download(job_id: str, req: DownloadRequest) -> None:
     album = req.album.strip()
     title = req.title.strip()
 
+    def _safe(s: str) -> str:
+        """Strip characters that would split a path component."""
+        return s.replace("/", "-").replace("\0", "")
+
     if req.playlist:
-        dirname = f"{artist}-{album}" if artist and album else (artist or album or "playlist")
+        dirname = f"{_safe(artist)}-{_safe(album)}" if artist and album else _safe(artist or album or "playlist")
         savedir = SAVE_DIR / dirname
         output_template = "%(autonumber)02d-%(title)s"
     else:
-        dirname = artist if artist else "unknown"
+        dirname = _safe(artist) if artist else "unknown"
         savedir = SAVE_DIR / dirname
         output_template = title if title else "%(title)s"
 
