@@ -473,10 +473,6 @@ async def _run_download(job_id: str, req: DownloadRequest) -> None:
     if state["done"] < state["total"]:
         _emit(job_id, "progress", json.dumps({"done": state["total"], "total": state["total"]}))
 
-    if req.playlist:
-        m3u_path = savedir / f"{dirname}.m3u"
-        m3u_path.write_text("\n".join(str(f) for f in sorted(savedir.glob("*.m4a"))) + "\n")
-
     # Probe, tag, and embed artwork for newly downloaded files.
     new_files = sorted(set(savedir.glob("*.m4a")) - before_files)
 
@@ -556,6 +552,10 @@ async def _run_download(job_id: str, req: DownloadRequest) -> None:
                 tmp.unlink(missing_ok=True)
                 _emit(job_id, "failed", "delay trim failed")
                 return
+
+    if req.playlist:
+        m3u_path = savedir / f"{dirname}.m3u"
+        m3u_path.write_text("\n".join(str(f) for f in sorted(savedir.glob("*.m4a"))) + "\n")
 
     log.info("download done: job=%s savedir=%s", job_id, savedir)
     _emit(job_id, "done", "")
