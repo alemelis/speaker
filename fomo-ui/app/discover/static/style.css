@@ -1,0 +1,45 @@
+.panel {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.search-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.search-bar input { flex: 1; }
+
+.panel-status { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
+.panel-status.error { color: var(--danger); }
+
+.results { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+}
+
+.result-meta { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
+
+.result-artist { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-track  { font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-album  { font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dl-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  font-size: 0.88rem;
+  text-decoration: none;
+  color: var(--text);
+  background: var(--panel);
+  white-space: nowrap;
+}
+.dl-btn:hover { text-decoration: underline; }

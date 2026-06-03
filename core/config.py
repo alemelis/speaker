@@ -29,3 +29,6 @@ RFID_CONTAINER: str = os.getenv("RFID_CONTAINER", "rfid-daemon")
 NFC_DEVICE_MATCH: tuple[str, ...] = tuple(
     s.strip() for s in os.getenv("NFC_DEVICE_MATCH", "Van Ooijen,RFID").split(",") if s.strip()
 )
+
+# Discover feature — free key at last.fm/api/account/create
+LASTFM_API_KEY: str = os.getenv("LASTFM_API_KEY", "")

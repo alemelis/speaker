@@ -1,5 +1,18 @@
 'use strict';
 
+// Prefill fields when deep-linked from /discover/ with ?url=&title=&artist=&album=&search=
+(function () {
+  const p = new URLSearchParams(location.search);
+  if (p.get('url'))    document.getElementById('url-input').value    = p.get('url');
+  if (p.get('title'))  document.getElementById('title-input').value  = p.get('title');
+  if (p.get('artist')) document.getElementById('artist-input').value = p.get('artist');
+  if (p.get('album'))  document.getElementById('album-input').value  = p.get('album');
+  if (p.get('search')) {
+    document.getElementById('search-input').value = p.get('search');
+    doSearch();
+  }
+})();
+
 // --- Search ---
 
 const searchInput   = document.getElementById('search-input');

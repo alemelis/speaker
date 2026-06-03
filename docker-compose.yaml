@@ -88,6 +88,7 @@ services:
             OWNTONE_BASE: http://host.docker.internal:3689/api
             OWNTONE_API: http://host.docker.internal:3689/api
             FOMO_DB: /data/fomo.db
+            LASTFM_API_KEY: ${LASTFM_API_KEY:-}
         volumes:
             - ${ST_SAVE_DIR}:/music
             - ${SPEAKER_DIR}:/data

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FOMO Discover</title>
+  <link rel="stylesheet" href="fomo.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="/">FOMO</a> / Discover</h1>
+  </header>
+
+  <main class="panel">
+    <div class="search-bar">
+      <input id="query-input" type="text" autofocus placeholder="Artist - Track  (e.g. Fu Manchu - Eatin Dust)">
+      <button id="search-btn" type="button">Find similar</button>
+    </div>
+    <p id="status" class="panel-status hidden"></p>
+    <div id="results"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
 from .artwork.app import app as artwork_app
+from .discover.app import app as discover_app
 from .downloader.app import app as downloader_app
 from .metadata.app import app as metadata_app
 from .tags.app import app as tags_app
@@ -15,6 +16,7 @@ async def root():
 
 
 app.mount("/artwork", artwork_app)
+app.mount("/discover", discover_app)
 app.mount("/download", downloader_app)
 app.mount("/metadata", metadata_app)
 app.mount("/tags", tags_app)
