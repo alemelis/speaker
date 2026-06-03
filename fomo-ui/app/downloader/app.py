@@ -239,7 +239,7 @@ async def playlist_info(req: PlaylistInfoRequest):
     def _fetch():
         # ignoreerrors=True so one private/removed video doesn't abort listing
         # the whole playlist (its entry comes back as None and is skipped below).
-        opts = {"flat_playlist": True, "quiet": True, "no_warnings": True,
+        opts = {"extract_flat": True, "quiet": True, "no_warnings": True,
                 "ignoreerrors": True,
                 "extractor_args": {"youtube": {"player_client": ["tv_embedded"]}}}
         with YoutubeDL(opts) as ydl:
