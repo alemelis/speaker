@@ -13,10 +13,18 @@
   </header>
 
   <main class="panel">
-    <div class="search-bar">
-      <input id="query-input" type="text" autofocus placeholder="Artist - Track  (e.g. Fu Manchu - Eatin Dust)">
-      <button id="search-btn" type="button">Find similar</button>
+    <div class="mode-bar">
+      <button class="mode-btn active" data-mode="similar_tracks">Similar tracks</button>
+      <button class="mode-btn" data-mode="similar_artists">Similar artists</button>
+      <button class="mode-btn" data-mode="song">Song lookup</button>
+      <button class="mode-btn" data-mode="discography">Discography</button>
     </div>
+
+    <div class="search-bar">
+      <input id="query-input" type="text" autofocus>
+      <button id="search-btn" type="button">Search</button>
+    </div>
+
     <p id="status" class="panel-status hidden"></p>
     <div id="results"></div>
   </main>
