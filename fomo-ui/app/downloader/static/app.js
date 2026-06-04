@@ -165,12 +165,18 @@ fetchBtn.addEventListener('click', async () => {
 
 function renderTrackList(entries) {
   trackList.innerHTML = '';
-  entries.forEach(({ index, title }) => {
+  entries.forEach(({ index, title, available }) => {
+    const unavailable = available === false;
     const li = document.createElement('li');
-    li.innerHTML = `<label><input type="checkbox" value="${index}" checked> ${title}</label>`;
+    li.className = unavailable ? 'unavailable' : '';
+    li.innerHTML = `<label><input type="checkbox" value="${index}" ${unavailable ? '' : 'checked'} ${unavailable ? 'disabled' : ''}> ${title}</label>`;
     trackList.appendChild(li);
   });
-  trackCount.textContent = `${entries.length} tracks`;
+  const avail = entries.filter(e => e.available !== false).length;
+  const total = entries.length;
+  trackCount.textContent = avail === total
+    ? `${total} tracks`
+    : `${avail} of ${total} tracks available`;
 }
 
 selAllBtn.addEventListener('click',  () => trackList.querySelectorAll('input').forEach(cb => cb.checked = true));
@@ -217,6 +223,13 @@ async function startDownload({ playlist, selected_items, total }) {
   } catch (err) {
     hideProgress();
     showError(err.message);
+    return;
+  }
+
+  if (!res.ok) {
+    hideProgress();
+    const data = await res.json().catch(() => ({}));
+    showError(data.detail || `Request failed (${res.status})`);
     return;
   }
 

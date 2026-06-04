@@ -230,6 +230,34 @@ def _yt_search_playlists(query: str, n: int) -> list[dict]:
         return []
 
 
+_UNAVAILABLE_TITLES = frozenset({"[Private video]", "[Deleted video]"})
+
+
+def _check_url_available(url: str) -> str | None:
+    """Return an error string if the URL is unavailable, None if ok.
+
+    Uses skip_download so no file is written — this is just a metadata probe.
+    """
+    from yt_dlp import YoutubeDL, utils  # noqa: PLC0415
+
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "extractor_args": {"youtube": {"player_client": ["tv_embedded"]}},
+    }
+    try:
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+        if info is None or info.get("title") in _UNAVAILABLE_TITLES:
+            return "Video unavailable."
+        return None
+    except utils.DownloadError as exc:
+        return _strip_ansi(str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return str(exc)
+
+
 @app.post("/api/playlist-info")
 async def playlist_info(req: PlaylistInfoRequest):
     from yt_dlp import YoutubeDL  # noqa: PLC0415
@@ -237,8 +265,6 @@ async def playlist_info(req: PlaylistInfoRequest):
     log.info("playlist-info url=%r", req.url)
 
     def _fetch():
-        # ignoreerrors=True so one private/removed video doesn't abort listing
-        # the whole playlist (its entry comes back as None and is skipped below).
         opts = {"extract_flat": True, "quiet": True, "no_warnings": True,
                 "ignoreerrors": True,
                 "extractor_args": {"youtube": {"player_client": ["tv_embedded"]}}}
@@ -251,15 +277,21 @@ async def playlist_info(req: PlaylistInfoRequest):
         log.error("playlist-info failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Keep `index` aligned with the true playlist position (1-based) so the
-    # selected_items the UI sends still map to yt-dlp's playlist_items on
-    # download; skip unavailable entries (None) without renumbering.
-    entries = [
-        {"index": i, "title": entry.get("title") or f"Track {i}"}
-        for i, entry in enumerate(data.get("entries", []), 1)
-        if entry
-    ]
-    log.info("playlist-info done: %d entries", len(entries))
+    # Keep index aligned with the true 1-based playlist position so
+    # selected_items maps correctly to yt-dlp's playlist_items on download.
+    # Unavailable entries (None or known-unavailable titles) are included but
+    # marked available=False so the UI can show them grayed/unchecked.
+    entries = []
+    for i, entry in enumerate(data.get("entries", []), 1):
+        if entry is None:
+            entries.append({"index": i, "title": "[Unavailable]", "available": False})
+        elif entry.get("title") in _UNAVAILABLE_TITLES:
+            entries.append({"index": i, "title": entry["title"], "available": False})
+        else:
+            entries.append({"index": i, "title": entry.get("title") or f"Track {i}", "available": True})
+
+    unavailable = sum(1 for e in entries if not e["available"])
+    log.info("playlist-info done: %d entries, %d unavailable", len(entries), unavailable)
     return {"entries": entries}
 
 
@@ -272,6 +304,14 @@ async def download(req: DownloadRequest):
     The job runs independently of any HTTP connection, so closing the page does
     not stop it. Clients watch progress via GET /api/download/{job_id}/events.
     """
+    # For single-video downloads, probe availability before creating the job so
+    # the user gets an instant error rather than a full download attempt that
+    # fails at the very end.
+    if not req.playlist:
+        err = await asyncio.to_thread(_check_url_available, req.url)
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+
     job_id = uuid.uuid4().hex
     total = len(req.selected_items) if req.playlist and req.selected_items else 1
     db.create_download(

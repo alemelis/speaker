@@ -194,6 +194,15 @@ label {
   flex-shrink: 0;
 }
 
+#track-list li.unavailable label {
+  color: #999;
+  text-decoration: line-through;
+  cursor: default;
+}
+#track-list li.unavailable label:hover {
+  background: none;
+}
+
 /* Progress */
 
 #progress-section {
