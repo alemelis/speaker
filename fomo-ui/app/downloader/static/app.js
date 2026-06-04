@@ -1,5 +1,64 @@
 'use strict';
 
+// --- Preview controller ---
+
+const _audio = document.getElementById('preview-audio');
+let _activeBtn = null;
+
+function _resetBtn(btn) {
+  if (!btn) return;
+  btn.textContent = '▶';
+  btn.classList.remove('playing', 'loading');
+}
+
+_audio.addEventListener('ended', () => _resetBtn(_activeBtn));
+_audio.addEventListener('pause',  () => _resetBtn(_activeBtn));
+
+async function playPreview(query, btn) {
+  if (btn === _activeBtn && !_audio.paused) {
+    _audio.pause();
+    return;
+  }
+  if (!_audio.paused) _audio.pause();
+  _resetBtn(_activeBtn);
+  _activeBtn = btn;
+
+  btn.textContent = '…';
+  btn.classList.add('loading');
+
+  try {
+    const res = await fetch(`api/preview?q=${encodeURIComponent(query)}`);
+    const { preview_url } = await res.json();
+    if (!preview_url) {
+      btn.textContent = '✕';
+      btn.classList.remove('loading');
+      setTimeout(() => { if (_activeBtn === btn) _resetBtn(btn); }, 1500);
+      return;
+    }
+    _audio.src = preview_url;
+    _audio.currentTime = 0;
+    await _audio.play();
+    btn.textContent = '▮';
+    btn.classList.remove('loading');
+    btn.classList.add('playing');
+  } catch {
+    _resetBtn(btn);
+  }
+}
+
+function makePreviewBtn(title) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'preview-btn';
+  btn.textContent = '▶';
+  btn.title = 'Preview';
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    playPreview(title, btn);
+  });
+  return btn;
+}
+
 // Prefill fields when deep-linked from /discover/ with ?url=&title=&artist=&album=&search=
 (function () {
   const p = new URLSearchParams(location.search);
@@ -78,6 +137,7 @@ function renderResultGroup(container, results, isPlaylist) {
         <span class="search-title">${r.title}</span>
         ${sub ? `<span class="search-sub">${sub}</span>` : ''}
       </div>`;
+    if (!isPlaylist) item.appendChild(makePreviewBtn(r.title));
     item.addEventListener('click', () => {
       document.getElementById('url-input').value = r.url;
       if (!isPlaylist) document.getElementById('title-input').value = r.title;
@@ -169,7 +229,10 @@ function renderTrackList(entries) {
     const unavailable = available === false;
     const li = document.createElement('li');
     li.className = unavailable ? 'unavailable' : '';
-    li.innerHTML = `<label><input type="checkbox" value="${index}" ${unavailable ? '' : 'checked'} ${unavailable ? 'disabled' : ''}> ${title}</label>`;
+    const label = document.createElement('label');
+    label.innerHTML = `<input type="checkbox" value="${index}" ${unavailable ? '' : 'checked'} ${unavailable ? 'disabled' : ''}> ${title}`;
+    li.appendChild(label);
+    if (!unavailable) li.appendChild(makePreviewBtn(title));
     trackList.appendChild(li);
   });
   const avail = entries.filter(e => e.available !== false).length;

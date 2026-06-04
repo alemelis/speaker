@@ -48,6 +48,23 @@
   border-bottom: 1px solid var(--border);
 }
 
+.preview-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.preview-btn:hover  { color: var(--text); }
+.preview-btn.playing { color: var(--text); font-weight: 700; }
+.preview-btn.loading { color: var(--muted); cursor: wait; }
+
 .search-result:last-child {
   border-bottom: 0;
 }
@@ -192,6 +209,16 @@ label {
 #track-list input[type="checkbox"] {
   width: auto;
   flex-shrink: 0;
+}
+
+#track-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#track-list li .preview-btn {
+  margin-left: 0.5rem;
 }
 
 #track-list li.unavailable label {

@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import requests as _requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -105,6 +106,54 @@ app = FastAPI(title="FOMO Downloader")
 # Shared SQLite connection (WAL, check_same_thread=False) for download-job state.
 _conn = db.connect(config.FOMO_DB)
 _search_cache = TTLCache(300.0)
+_preview_cache = TTLCache(3600.0)
+
+# Noise patterns stripped from YouTube titles before catalog lookup.
+_YT_NOISE = _re.compile(
+    r"""(?ix)
+    \(?\s*(?:official\s*(?:music\s*)?(?:video|audio|lyrics?|visuali[sz]er)|
+             lyric\s*video|hd|hq|4k|full\s*album|remastered|feat\.?.*)\s*\)?
+    |\[.*?\]
+    """,
+)
+
+
+def _clean_title(q: str) -> str:
+    return _re.sub(r"\s{2,}", " ", _YT_NOISE.sub("", q)).strip()
+
+
+def _lookup_preview(q: str) -> dict:
+    """iTunes primary, Deezer fallback. Returns {preview_url, artist, title}."""
+    clean = _clean_title(q)
+    # iTunes
+    try:
+        r = _requests.get(
+            "https://itunes.apple.com/search",
+            params={"term": clean, "media": "music", "entity": "song", "limit": 1},
+            timeout=5,
+        )
+        r.raise_for_status()
+        results = r.json().get("results", [])
+        if results and results[0].get("previewUrl"):
+            t = results[0]
+            return {"preview_url": t["previewUrl"], "artist": t.get("artistName", ""), "title": t.get("trackName", "")}
+    except Exception:  # noqa: BLE001
+        pass
+    # Deezer fallback
+    try:
+        r = _requests.get(
+            "https://api.deezer.com/search",
+            params={"q": clean, "limit": 1},
+            timeout=5,
+        )
+        r.raise_for_status()
+        data = r.json().get("data", [])
+        if data and data[0].get("preview"):
+            t = data[0]
+            return {"preview_url": t["preview"], "artist": t.get("artist", {}).get("name", ""), "title": t.get("title", "")}
+    except Exception:  # noqa: BLE001
+        pass
+    return {"preview_url": None, "artist": "", "title": ""}
 
 # Live SSE fan-out: job_id -> set of subscriber queues. Jobs run regardless of
 # whether anyone is currently subscribed, so a download survives leaving the page.
@@ -148,6 +197,18 @@ def _emit(job_id: str, event: str, data: str) -> None:
     elif event == "cancelled":
         db.update_download(_conn, job_id, status="cancelled", message="cancelled")
     _publish(job_id, event, data)
+
+
+# ---------------- preview ----------------
+
+@app.get("/api/preview")
+async def preview(q: str):
+    cached = _preview_cache.get(q)
+    if cached is not None:
+        return cached
+    result = await asyncio.to_thread(_lookup_preview, q)
+    _preview_cache.set(q, result)
+    return result
 
 
 # ---------------- search ----------------
