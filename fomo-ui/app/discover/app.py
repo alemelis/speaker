@@ -137,7 +137,7 @@ def _discography(q: str) -> dict:
         if g.get("primary-type") != "Album" or g.get("secondary-types"):
             continue
         year = (g.get("first-release-date") or "")[:4]
-        albums.append({"artist": artist_name, "album": g.get("title", ""), "year": year})
+        albums.append({"artist": artist_name, "album": g.get("title", ""), "year": year, "mbid": g.get("id", "")})
     albums.sort(key=lambda a: a["year"] or "9999")
     if not albums:
         return {"results": [], "result_type": "albums", "message": "No studio albums found."}

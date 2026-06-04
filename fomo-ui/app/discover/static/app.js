@@ -112,16 +112,29 @@ function renderAlbums(results) {
   if (!results.length) { resultsEl.innerHTML = '<p class="panel-status">No results.</p>'; return; }
   const el = document.createElement('div');
   el.className = 'results';
-  results.forEach(({ artist, album, year }) => {
+  results.forEach(({ artist, album, year, mbid }) => {
     const actions = document.createElement('div');
     actions.className = 'row-actions';
     actions.appendChild(tracksToggle(artist, album));
     actions.appendChild(dlAlbumLink(artist, album));
+
+    const cover = document.createElement('img');
+    cover.className = 'cover-art';
+    cover.alt = '';
+    cover.loading = 'lazy';
+    if (mbid) {
+      cover.src = `https://coverartarchive.org/release-group/${mbid}/front-250`;
+      cover.onerror = () => { cover.style.display = 'none'; };
+    } else {
+      cover.style.display = 'none';
+    }
+
     const row = makeRow(
       `<span class="r-artist">${esc(artist)}</span>
        <span class="r-title">${esc(album)}</span>
        ${year ? `<span class="r-sub">${esc(year)}</span>` : ''}`,
       actions,
+      cover,
     );
     el.appendChild(row);
     el.appendChild(makeTracklist(artist, album, row));
@@ -129,9 +142,10 @@ function renderAlbums(results) {
   resultsEl.appendChild(el);
 }
 
-function makeRow(metaHtml, actionEl) {
+function makeRow(metaHtml, actionEl, leadEl) {
   const row = document.createElement('div');
   row.className = 'result-row';
+  if (leadEl) row.appendChild(leadEl);
   const meta = document.createElement('div');
   meta.className = 'result-meta';
   meta.innerHTML = metaHtml;
