@@ -28,6 +28,7 @@ const batchForm = document.getElementById("batch-form");
 const batchLoading = document.getElementById("batch-loading");
 const applySelectedBtn = document.getElementById("apply-selected-btn");
 const fixFilenameBtn = document.getElementById("fix-filename-btn");
+const refetchArtBtn = document.getElementById("refetch-art-btn");
 const probeSelectedBtn = document.getElementById("probe-selected-btn");
 const deleteSelectedBtn = document.getElementById("delete-selected-btn");
 const editorPanel = document.getElementById("editor-panel");
@@ -262,6 +263,25 @@ async function fixFromFilename() {
   }
 }
 
+async function refetchArtwork() {
+  const paths = Array.from(state.selectedPaths);
+  if (!paths.length) return;
+
+  refetchArtBtn.disabled = true;
+  refetchArtBtn.textContent = "Fetching...";
+  try {
+    const result = await api("api/refetch-artwork", {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    });
+    const msg = `Artwork: ${result.fetched} fetched, ${result.no_match} not found${result.errors.length ? ` (${result.errors.join("; ")})` : ""}.`;
+    showMessage(msg, result.fetched === 0);
+  } finally {
+    refetchArtBtn.disabled = false;
+    refetchArtBtn.textContent = "Refetch artwork";
+  }
+}
+
 async function probeSelected() {
   const paths = Array.from(state.selectedPaths);
   if (!paths.length) return;
@@ -433,6 +453,14 @@ fixFilenameBtn.addEventListener("click", async () => {
     await fixFromFilename();
   } catch (err) {
     sendFrontendLog({ level: "error", source: "fixFromFilename", message: errorToString(err) });
+    showMessage(err.message, true);
+  }
+});
+refetchArtBtn.addEventListener("click", async () => {
+  try {
+    await refetchArtwork();
+  } catch (err) {
+    sendFrontendLog({ level: "error", source: "refetchArtwork", message: errorToString(err) });
     showMessage(err.message, true);
   }
 });

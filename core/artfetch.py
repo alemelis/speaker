@@ -144,6 +144,36 @@ def backfill_missing(music_root: Path) -> dict[str, int]:
     return stats
 
 
+def fetch_for_dir(dirpath: Path) -> dict:
+    """Force-fetch artwork for a specific album directory, replacing any existing art.
+
+    Unlike backfill_missing, this ignores whether art already exists — it always
+    re-queries MusicBrainz using the current file tags (ground truth after a rename).
+    """
+    audio = _audio_files(dirpath)
+    if not audio:
+        return {"ok": False, "reason": "no_audio_files"}
+
+    artist, album = _meta_from_tags(audio)
+    if not artist or not album:
+        return {"ok": False, "reason": "missing_tags"}
+
+    print(f"  refetch: artist={artist!r} album={album!r}")
+    data = fetch_cover(artist, album)
+    if data is None:
+        return {"ok": False, "reason": "no_match"}
+
+    for name in ("cover.jpg", "cover.png", "folder.jpg", "folder.png"):
+        old = dirpath / name
+        if old.exists():
+            old.unlink()
+
+    artwork.write_folder_cover(dirpath, data, ".jpg")
+    embedded = sum(1 for f in audio if artwork.embed_art(f, "image/jpeg", data))
+    print(f"    wrote cover.jpg + embedded into {embedded}/{len(audio)} files")
+    return {"ok": True, "embedded": embedded}
+
+
 if __name__ == "__main__":
     root = config.MUSIC_ROOT
     print(f"Scanning {root} for albums with no art ...")

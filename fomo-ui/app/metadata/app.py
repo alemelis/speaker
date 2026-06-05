@@ -36,6 +36,10 @@ class FixFromFilenameRequest(BaseModel):
     paths: list[str] = Field(default_factory=list)
 
 
+class RefetchArtworkRequest(BaseModel):
+    paths: list[str] = Field(default_factory=list)
+
+
 class FrontendLogRequest(BaseModel):
     level: str = "error"
     message: str
@@ -155,6 +159,29 @@ def delete_track_endpoint(path: str) -> dict[str, Any]:
     abs_path.unlink()
     remove_one(path)
     return {"ok": True, "path": path}
+
+
+@api_router.post("/refetch-artwork")
+def refetch_artwork_endpoint(payload: RefetchArtworkRequest) -> dict[str, Any]:
+    from core.artfetch import fetch_for_dir  # noqa: PLC0415
+
+    dirs: set[Path] = set()
+    for path in payload.paths:
+        abs_path = validate_path(path, MUSIC_ROOT)
+        dirs.add(abs_path.parent)
+
+    fetched = no_match = 0
+    errors: list[str] = []
+    for dirpath in dirs:
+        result = fetch_for_dir(dirpath)
+        if result["ok"]:
+            fetched += 1
+        elif result["reason"] == "no_match":
+            no_match += 1
+        else:
+            errors.append(f"{dirpath.name}: {result['reason']}")
+
+    return {"ok": True, "fetched": fetched, "no_match": no_match, "errors": errors}
 
 
 @api_router.post("/frontend-log")
