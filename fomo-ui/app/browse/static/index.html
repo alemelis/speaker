@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FOMO Browse</title>
+  <link rel="stylesheet" href="fomo.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="/">FOMO</a> / Browse</h1>
+  </header>
+
+  <p id="status" class="status-bar hidden"></p>
+
+  <div class="coverflow-wrap">
+    <button class="cf-nav cf-nav-prev" id="cf-prev" aria-label="Previous">&#8249;</button>
+    <div id="coverflow" class="coverflow" tabindex="0"></div>
+    <button class="cf-nav cf-nav-next" id="cf-next" aria-label="Next">&#8250;</button>
+  </div>
+
+  <div id="cf-label" class="cf-label hidden">
+    <span id="cf-label-album" class="cf-label-album"></span>
+    <span id="cf-label-artist" class="cf-label-artist"></span>
+  </div>
+
+  <div id="detail" class="detail hidden">
+    <div class="detail-inner">
+      <div class="detail-cover-wrap">
+        <img id="detail-cover" class="detail-cover" alt="">
+      </div>
+      <div class="detail-info">
+        <div id="detail-artist" class="detail-artist"></div>
+        <div id="detail-album" class="detail-album"></div>
+        <div id="detail-year" class="detail-year"></div>
+        <div class="tracklist-wrap">
+          <ol id="detail-tracklist" class="tracklist"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

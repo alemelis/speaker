@@ -496,3 +496,4 @@ window.addEventListener("unhandledrejection", (event) => {
     stack: reason?.stack || null,
   });
 });
+

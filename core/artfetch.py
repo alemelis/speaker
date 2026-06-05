@@ -39,6 +39,29 @@ def parse_dirname(name: str) -> tuple[str, str]:
     return "", name.strip()
 
 
+def _meta_from_tags(audio: list[Path]) -> tuple[str, str]:
+    """Read albumartist/album from the first audio file's tags.
+
+    Falls back to parse_dirname on the folder name if tags are missing.
+    Tags are the ground truth — folder names can be wrong after a rename.
+    """
+    try:
+        from mutagen import File as MutagenFile  # noqa: PLC0415
+        tags = MutagenFile(audio[0], easy=True)
+        if tags and tags.tags:
+            def _first(key: str) -> str:
+                v = tags.tags.get(key, [])
+                val = v[0] if isinstance(v, list) else v
+                return str(val).strip() if val else ""
+            artist = _first("albumartist") or _first("artist")
+            album  = _first("album")
+            if artist and album:
+                return artist, album
+    except Exception:
+        pass
+    return parse_dirname(audio[0].parent.name)
+
+
 def _mb_release_group_id(artist: str, album: str) -> str | None:
     if album and artist:
         query = f'releasegroup:"{album}" AND artist:"{artist}"'
@@ -102,7 +125,7 @@ def backfill_missing(music_root: Path) -> dict[str, int]:
             stats["skipped_have_art"] += 1
             continue
 
-        artist, album = parse_dirname(dirpath.name)
+        artist, album = _meta_from_tags(audio)
         print(f"  looking up: artist={artist!r} album={album!r}")
         data = fetch_cover(artist, album)
         if data is None:

@@ -109,3 +109,23 @@ class OwnToneClient:
     def fetch_artwork(self, relative: str) -> requests.Response:
         """Stream artwork bytes from OwnTone for the /artwork proxy."""
         return self.session.get(self.artwork_url(relative), timeout=self.timeout, stream=True)
+
+    # ---------------- browse (library catalog) ----------------
+
+    def list_albums(self, limit: int = 500, offset: int = 0) -> dict:
+        r = self.session.get(
+            f"{self.base}/library/albums",
+            params={"limit": limit, "offset": offset},
+            timeout=self.timeout,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def album_tracks(self, album_id: str, limit: int = 200) -> dict:
+        r = self.session.get(
+            f"{self.base}/library/albums/{album_id}/tracks",
+            params={"limit": limit},
+            timeout=self.timeout,
+        )
+        r.raise_for_status()
+        return r.json()

@@ -1,0 +1,249 @@
+/* Make the full page a locked column so the strip is fixed and detail scrolls */
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.status-bar {
+  flex-shrink: 0;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  margin: 0;
+}
+.status-bar.error { color: var(--danger); }
+
+/* ---- Coverflow strip ---- */
+.coverflow-wrap {
+  flex-shrink: 0;
+  position: relative;
+  height: 260px;
+  background: #111;
+  overflow: hidden;
+  /* Perspective lives here so all child tiles share one vanishing point */
+  perspective: 1000px;
+  perspective-origin: 50% 45%;
+}
+
+/* The actual 3D stage — fills the wrap, holds absolutely-positioned tiles */
+.coverflow {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  outline: none;
+}
+
+/* Individual album tile */
+.cover-tile {
+  position: absolute;
+  top: 22px;          /* leave ~68px below for reflection */
+  width: 170px;
+  height: 170px;
+  cursor: pointer;
+  transform-origin: center center;
+  transition:
+    left      0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    transform 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    opacity   0.3s  ease;
+}
+
+.cover-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.7);
+  /* Reflection on WebKit (Chrome, Safari) */
+  -webkit-box-reflect: below 2px
+    linear-gradient(transparent 65%, rgba(0,0,0,0.55));
+}
+
+/* Placeholder tile when no cover art */
+.tile-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  text-align: center;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.7);
+  -webkit-box-reflect: below 2px
+    linear-gradient(transparent 65%, rgba(0,0,0,0.55));
+}
+
+.tile-placeholder .tile-album {
+  color: #ccc;
+  font-size: 0.72rem;
+  font-weight: 700;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-height: 1.3;
+}
+
+.tile-placeholder .tile-artist {
+  color: #777;
+  font-size: 0.62rem;
+  margin-top: 0.3rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* Prev / Next nav buttons */
+.cf-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 300;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #fff;
+  width: 38px;
+  height: 38px;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  padding: 0;
+  transition: background 0.15s;
+}
+.cf-nav:hover { background: rgba(0,0,0,0.72); text-decoration: none; }
+.cf-nav-prev { left:  0.6rem; }
+.cf-nav-next { right: 0.6rem; }
+
+/* Album label strip below the coverflow */
+.cf-label {
+  flex-shrink: 0;
+  background: #111;
+  border-bottom: 1px solid #000;
+  padding: 0.3rem 1rem 0.45rem;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.cf-label-album {
+  display: block;
+  color: #eee;
+  font-size: 0.9rem;
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cf-label-artist {
+  display: block;
+  color: #888;
+  font-size: 0.78rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ---- Detail panel — cover fixed left, info+tracklist scroll right ---- */
+.detail {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.detail-inner {
+  display: flex;
+  gap: 2rem;
+  padding: 1.25rem 1.5rem;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.detail-cover-wrap { flex-shrink: 0; }
+
+.detail-cover {
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  display: block;
+}
+
+/* Info column — flex column so tracklist takes remaining height */
+.detail-info {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-artist {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 0.15rem;
+}
+
+.detail-album  { flex-shrink: 0; font-size: 1rem; margin-bottom: 0.1rem; }
+
+.detail-year {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+/* Tracklist scrolls within the info column */
+.tracklist-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tracklist {
+  margin: 0;
+  padding-left: 1.5rem;
+  font-size: 0.88rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tracklist li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tl-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tl-dur   { flex-shrink: 0; color: var(--muted); }
+
+.tl-loading {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-style: italic;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
