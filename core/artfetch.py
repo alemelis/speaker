@@ -20,6 +20,8 @@ AUDIO_SUFFIXES = {".m4a", ".mp3", ".flac", ".ogg", ".opus"}
 USER_AGENT = "FOMO-jukebox/1.0 (https://github.com/alemelis; alessandro_melis@rocketmail.com)"
 MB_BASE = "https://musicbrainz.org/ws/2"
 CAA_BASE = "https://coverartarchive.org"
+DEEZER_BASE = "https://api.deezer.com"
+DISCOGS_BASE = "https://api.discogs.com"
 MB_MIN_SCORE = 85  # ignore weak matches to avoid wrong covers
 MB_RATE_LIMIT_S = 1.1  # MusicBrainz asks for <= 1 req/s
 
@@ -103,11 +105,69 @@ def _caa_front(rg_id: str) -> bytes | None:
     return img.content
 
 
+def _deezer_cover(artist: str, album: str) -> bytes | None:
+    """Fallback: search Deezer for a 500px album cover."""
+    try:
+        r = _session.get(
+            f"{DEEZER_BASE}/search/album",
+            params={"q": f'artist:"{artist}" album:"{album}"', "limit": 1},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return None
+        items = r.json().get("data", [])
+        if not items:
+            return None
+        cover_url = items[0].get("cover_big") or items[0].get("cover_medium")
+        if not cover_url:
+            return None
+        img = _session.get(cover_url, timeout=30)
+        if img.status_code != 200 or not img.content:
+            return None
+        return img.content
+    except Exception:
+        return None
+
+
+def _discogs_cover(artist: str, album: str) -> bytes | None:
+    """Fallback: search Discogs for a master release cover (requires DISCOGS_TOKEN)."""
+    token = config.DISCOGS_TOKEN
+    if not token:
+        return None
+    try:
+        headers = {"Authorization": f"Discogs token={token}", "User-Agent": USER_AGENT}
+        r = _session.get(
+            f"{DISCOGS_BASE}/database/search",
+            params={"type": "master", "artist": artist, "release_title": album, "per_page": 1},
+            headers=headers,
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return None
+        results = r.json().get("results", [])
+        if not results:
+            return None
+        cover_url = results[0].get("cover_image") or results[0].get("thumb")
+        if not cover_url or "spacer" in cover_url:
+            return None
+        img = _session.get(cover_url, headers=headers, timeout=30)
+        if img.status_code != 200 or not img.content:
+            return None
+        return img.content
+    except Exception:
+        return None
+
+
 def fetch_cover(artist: str, album: str) -> bytes | None:
     rg_id = _mb_release_group_id(artist, album)
-    if not rg_id:
-        return None
-    return _caa_front(rg_id)
+    if rg_id:
+        data = _caa_front(rg_id)
+        if data:
+            return data
+    data = _deezer_cover(artist, album)
+    if data:
+        return data
+    return _discogs_cover(artist, album)
 
 
 def backfill_missing(music_root: Path) -> dict[str, int]:

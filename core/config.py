@@ -32,3 +32,7 @@ NFC_DEVICE_MATCH: tuple[str, ...] = tuple(
 
 # Discover feature — free key at last.fm/api/account/create
 LASTFM_API_KEY: str = os.getenv("LASTFM_API_KEY", "")
+
+# Discogs personal access token — https://www.discogs.com/settings/developers
+# Used as a fallback artwork source when MusicBrainz/CAA has no cover.
+DISCOGS_TOKEN: str = os.getenv("DISCOGS_TOKEN", "")
