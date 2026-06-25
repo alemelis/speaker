@@ -319,6 +319,70 @@ def _check_url_available(url: str) -> str | None:
         return str(exc)
 
 
+@app.get("/api/tracklist")
+async def tracklist(artist: str = "", album: str = ""):
+    """Fetch official tracklist from Deezer (iTunes fallback) for a given artist+album."""
+    if not artist.strip() and not album.strip():
+        return {"source": "none", "tracks": []}
+
+    def _fetch():
+        # Deezer: search album → fetch tracks
+        try:
+            r = _requests.get(
+                "https://api.deezer.com/search/album",
+                params={"q": f'artist:"{artist}" album:"{album}"', "limit": 1},
+                timeout=8,
+            )
+            if r.status_code == 200:
+                items = r.json().get("data", [])
+                if items:
+                    album_id = items[0].get("id")
+                    if album_id:
+                        tr = _requests.get(
+                            f"https://api.deezer.com/album/{album_id}/tracks",
+                            timeout=8,
+                        )
+                        if tr.status_code == 200:
+                            tracks = [
+                                {"position": t.get("track_position", i + 1), "title": t.get("title", "")}
+                                for i, t in enumerate(tr.json().get("data", []))
+                            ]
+                            if tracks:
+                                return {"source": "Deezer", "tracks": sorted(tracks, key=lambda x: x["position"])}
+        except Exception:
+            pass
+
+        # iTunes fallback: search songs by album
+        try:
+            term = f"{artist} {album}".strip()
+            r = _requests.get(
+                "https://itunes.apple.com/search",
+                params={"term": term, "entity": "song", "attribute": "albumTerm", "limit": 50},
+                timeout=8,
+            )
+            if r.status_code == 200:
+                results = r.json().get("results", [])
+                seen = set()
+                tracks = []
+                for t in sorted(results, key=lambda x: x.get("trackNumber", 999)):
+                    col = t.get("collectionName", "")
+                    if album.lower() not in col.lower():
+                        continue
+                    name = t.get("trackName", "")
+                    num = t.get("trackNumber", len(tracks) + 1)
+                    if name and name not in seen:
+                        seen.add(name)
+                        tracks.append({"position": num, "title": name})
+                if tracks:
+                    return {"source": "iTunes", "tracks": tracks}
+        except Exception:
+            pass
+
+        return {"source": "none", "tracks": []}
+
+    return await asyncio.to_thread(_fetch)
+
+
 @app.post("/api/playlist-info")
 async def playlist_info(req: PlaylistInfoRequest):
     from yt_dlp import YoutubeDL  # noqa: PLC0415

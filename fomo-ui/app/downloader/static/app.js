@@ -193,28 +193,48 @@ playlistCheck.addEventListener('change', () => {
 
 // --- Fetch playlist ---
 
+const refTracklist = document.getElementById('ref-tracklist');
+const refTracklistSummary = document.getElementById('ref-tracklist-summary');
+const refTrackList = document.getElementById('ref-track-list');
+
 fetchBtn.addEventListener('click', async () => {
-  const url = document.getElementById('url-input').value.trim();
+  const url    = document.getElementById('url-input').value.trim();
+  const artist = document.getElementById('artist-input').value.trim();
+  const album  = document.getElementById('album-input').value.trim();
   if (!url) return;
 
   resetFeedback();
   fetchBtn.disabled = true;
   fetchBtn.textContent = 'Fetching...';
+  refTracklist.classList.add('hidden');
 
   try {
-    const res = await fetch('api/playlist-info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
+    const [plRes, tlRes] = await Promise.allSettled([
+      fetch('api/playlist-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      }),
+      (artist || album)
+        ? fetch(`api/tracklist?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`)
+        : Promise.resolve(null),
+    ]);
+
+    if (plRes.status === 'rejected' || !plRes.value.ok) {
+      const text = plRes.status === 'rejected' ? plRes.reason.message : await plRes.value.text();
       showError(text);
       return;
     }
-    const { entries } = await res.json();
+    const { entries } = await plRes.value.json();
     renderTrackList(entries);
     trackSection.classList.remove('hidden');
+
+    if (tlRes.status === 'fulfilled' && tlRes.value) {
+      const { source, tracks } = await tlRes.value.json();
+      if (tracks && tracks.length) {
+        renderRefTracklist(source, tracks);
+      }
+    }
   } catch (err) {
     showError(err.message);
   } finally {
@@ -222,6 +242,18 @@ fetchBtn.addEventListener('click', async () => {
     fetchBtn.textContent = 'Fetch tracks';
   }
 });
+
+function renderRefTracklist(source, tracks) {
+  refTracklistSummary.textContent = `Official tracklist · ${source} (${tracks.length} tracks)`;
+  refTrackList.innerHTML = '';
+  tracks.forEach(({ position, title }) => {
+    const li = document.createElement('li');
+    li.value = position;
+    li.textContent = title;
+    refTrackList.appendChild(li);
+  });
+  refTracklist.classList.remove('hidden');
+}
 
 function renderTrackList(entries) {
   trackList.innerHTML = '';
